@@ -69,11 +69,11 @@ def parse_qt_data(data):
     """
     QT 데이터를 파싱하여 일정 딕셔너리로 변환합니다.
 
-    :param data: QT 데이터 문자열
+    :param data: QT 데이터 문자열 리스트
     :return: 일정 딕셔너리
     """
     qt_schedule = {}
-    lines = data.strip().split("\n")[1:]  # 첫 번째 줄은 제목이므로 제외
+    lines = data[1:]  # 첫 번째 줄은 제목이므로 제외
     for line in lines:
         try:
             # 디버깅용 출력
@@ -99,6 +99,7 @@ def parse_qt_data(data):
             print(f"[ERROR] Parsing error for line: {line} -> {e}")
     
     return qt_schedule
+
 
 # CSV 파일에서 성경 책 이름 매핑 읽기
 def load_book_map(csv_file):
