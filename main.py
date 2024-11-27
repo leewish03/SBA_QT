@@ -30,6 +30,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 # 데이터베이스 및 CSV 파일 경로 설정
 db_path = os.path.join(current_dir, "bible_database.db")
 csv_file_path = os.path.join(current_dir, "book_map.csv")
+qt_file_path = os.path.join(current_dir, "qt_data.txt")
 
 # 아이콘
 bible_icon="https://cdn.discordapp.com/attachments/923909506717585451/1310340987196801024/free-icon-bible-3004416.png?ex=6744dda4&is=67438c24&hm=38758bc26aa14760969d43d0f327346ccc6941afde479dd0d2bcd6cb4951a51d&"
@@ -45,6 +46,23 @@ qt_data = """
 11.30 (토) 시150 / 고전5-8
 12.1 (일) 없음 / 고전9-12
 """
+
+# qt_data 텍스트 파일에서 불러오기
+def read_qt_data(file_path):
+    """
+    qt_data.txt 파일에서 QT 일정 데이터를 읽어옵니다.
+
+    :param file_path: qt_data.txt 파일의 경로
+    :return: QT 일정 데이터 (문자열 리스트)
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            qt_data = file.readlines()
+        return [line.strip() for line in qt_data if line.strip()]
+    except FileNotFoundError:
+        return ["qt_data.txt 파일을 찾을 수 없습니다."]
+    except Exception as e:
+        return [f"파일 읽기 중 오류가 발생했습니다: {str(e)}"]
 
 # QT 데이터를 파싱하여 딕셔너리로 변환
 def parse_qt_data(data):
@@ -111,6 +129,9 @@ def format_bible_verses(book_and_chapters, book_map):
     """
     if not book_and_chapters:
         return ["없음"]
+
+    if book_and_chapters.strip() == "없음":
+        return ["오늘 QT는 없습니다."]
     
     try:
         # 책 이름과 장 범위 분리
@@ -396,12 +417,12 @@ def clear_all_blocks(page_id):
 def update_today_page(qt_schedule, book_map):
     today = datetime.now().strftime("%m.%d")
     today_info = qt_schedule.get(today, {"old": None, "new": None})
-    print(f"[DEBUG] 오늘의 QT 데이터: {today_info}")  # 디버깅
+    #print(f"[DEBUG] 오늘의 QT 데이터: {today_info}")  # 디버깅
 
     old_testament = format_bible_verses(today_info["old"], book_map)
-    #print(f"[DEBUG] 오늘의 구약: {old_testament}")  # 디버깅
+    #print(f"[DEBUG] 오늘의 QT: {old_testament}")  # 디버깅
     new_testament = format_bible_verses(today_info["new"], book_map)
-    #print(f"[DEBUG] 오늘의 신약: {new_testament}")  # 디버깅
+    #print(f"[DEBUG] 오늘의 통독: {new_testament}")  # 디버깅
 
     old_blocks = [
         {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": block}}]}}
@@ -432,12 +453,12 @@ def update_weekly_pages(qt_schedule, book_map):
     for i, day in enumerate(["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"], start=1):
         day_date = (now + timedelta(days=i - now.weekday() - 1)).strftime("%m.%d")
         day_info = qt_schedule.get(day_date, {"old": None, "new": None})
-        print(f"[DEBUG] {day} ({day_date}): {day_info}")  # 디버깅
+        #print(f"[DEBUG] {day} ({day_date}): {day_info}")  # 디버깅
 
         old_testament = format_bible_verses(day_info["old"], book_map)
-        #print(f"[DEBUG] {day} 구약: {old_testament}")  # 디버깅
+        #print(f"[DEBUG] {day} QT: {old_testament}")  # 디버깅
         new_testament = format_bible_verses(day_info["new"], book_map)
-        #print(f"[DEBUG] {day} 신약: {new_testament}")  # 디버깅
+        #print(f"[DEBUG] {day} 통독: {new_testament}")  # 디버깅
 
         old_blocks = [
             {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": block}}]}}
@@ -465,6 +486,7 @@ def update_weekly_pages(qt_schedule, book_map):
 # 메인 실행
 if __name__ == "__main__":
     book_map = load_book_map(csv_file_path)
+    qt_data = read_qt_data(qt_file_path)
     qt_schedule = parse_qt_data(qt_data)
     
     update_block_date(today_block_id)
