@@ -23,7 +23,7 @@ def run_script():
             log.write(f"Exception: {str(e)}\n")
 
 # 매일 오전 5시에 실행
-schedule.every().day.at("16:30").do(run_script)
+schedule.every().day.at("21:00").do(run_script)
 
 print("Scheduler started. Waiting for the time to execute...")
 
