@@ -9,7 +9,7 @@ def run_script():
     os.system(f"python3 {script_name}")
 
 # 매일 5시 스케줄 등록
-schedule.every().day.at("21:53").do(run_script)
+schedule.every().day.at("22:26").do(run_script)
 
 print("Scheduler started. Waiting for the time to execute...")
 
