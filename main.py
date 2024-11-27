@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import csv
 from datetime import datetime, timedelta
@@ -8,9 +9,27 @@ NOTION_API_KEY = "ntn_F4158704991w2VEa4eHR8G83VH4wKosqeshxbZmKGO64Kc"
 PARENT_PAGE_ID = "1470f7e0cd5f804a91dfcf468c578e45"  # 상위 페이지 ID
 notion = Client(auth=NOTION_API_KEY)
 
-# 파일 경로
-db_path = r"C:\Users\lekas\Documents\Python\QT\bible_database.db"
-csv_file_path = r"C:/Users/lekas/Documents/Python/QT/book_map.csv"
+PAGE_IDS = {
+    "오늘의 묵상": "1490f7e0cd5f810182a9f7d2c06dcc22",  # "오늘의 묵상" 페이지 ID
+    "월요일": "1490f7e0cd5f8142830cfeaa8275ec2f",       # 월요일 페이지 ID
+    "화요일": "1490f7e0cd5f812a8978e353d41ff0de",       # 화요일 페이지 ID
+    "수요일": "1490f7e0cd5f81f1ae1aff5421b465d2",       # 수요일 페이지 ID
+    "목요일": "1490f7e0cd5f81acac33f996fea133ca",       # 목요일 페이지 ID
+    "금요일": "1490f7e0cd5f81fe937fd99184e6aeee",       # 금요일 페이지 ID
+    "토요일": "1490f7e0cd5f814ba312da5ebb45ca6f",       # 토요일 페이지 ID
+    "일요일": "1490f7e0cd5f8159bf03ce40225d955e",       # 일요일 페이지 ID
+    
+}
+
+# 날짜블록 ID
+today_block_id = "1490f7e0cd5f815b9f76c9cf899a49ab"
+
+# 현재 파일이 있는 디렉토리 경로 가져오기
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 데이터베이스 및 CSV 파일 경로 설정
+db_path = os.path.join(current_dir, "bible_database.db")
+csv_file_path = os.path.join(current_dir, "book_map.csv")
 
 # 아이콘
 bible_icon="https://cdn.discordapp.com/attachments/923909506717585451/1310340987196801024/free-icon-bible-3004416.png?ex=6744dda4&is=67438c24&hm=38758bc26aa14760969d43d0f327346ccc6941afde479dd0d2bcd6cb4951a51d&"
@@ -268,7 +287,7 @@ def create_link_block(parent_page_id, link_text, link_url):
     except Exception as e:
         print(f"링크 블록 추가 중 오류 발생: {e}")
 
-# 노션 페이지 생성 함수
+''' 노션 페이지 생성 함수
 def create_or_update_page(title, content_blocks, parent_id, icon=None):
     """
     Notion 페이지를 생성하거나 업데이트합니다.
@@ -304,8 +323,65 @@ def create_or_update_page(title, content_blocks, parent_id, icon=None):
     except Exception as e:
         print(f"페이지 생성 중 오류 발생: {e}")
         return None
+'''
+# 페이지 내용 업데이트 함수
+def update_existing_page(page_id, content_blocks, new_title=None):
+    """
+    기존 페이지의 내용을 업데이트합니다.
 
-# 모든 블록 제거 함수
+    :param page_id: 기존 페이지의 ID
+    :param content_blocks: 업데이트할 블록의 목록
+    :param new_title: 페이지 제목을 업데이트할 경우 새 제목
+    """
+    try:
+        # 페이지 제목 업데이트 (옵션)
+        if new_title:
+            notion.pages.update(page_id, properties={
+                "title": [{"type": "text", "text": {"content": new_title}}],
+            })
+            print(f"페이지 제목 업데이트 완료: {new_title}")
+
+        # 기존 블록 삭제
+        existing_blocks = notion.blocks.children.list(block_id=page_id)["results"]
+        for block in existing_blocks:
+            notion.blocks.delete(block_id=block["id"])
+
+        # 새 블록 추가
+        for block in content_blocks:
+            notion.blocks.children.append(block_id=page_id, children=[block])
+
+        print(f"페이지 내용 업데이트 완료: {page_id}")
+
+    except Exception as e:
+        print(f"페이지 업데이트 중 오류 발생: {e}")
+
+def update_block_date(block_id):
+    """
+    Notion 블록 이름을 '오늘은 (이번달)월 (오늘)일입니다 🍀'로 업데이트합니다.
+    :param block_id: 업데이트할 블록 ID
+    """
+    try:
+        # 현재 날짜 가져오기
+        today = datetime.now()
+        new_title = f"오늘은 {today.month}월 {today.day}일입니다 🍀"
+        
+        # 블록 업데이트
+        notion.blocks.update(
+            block_id=block_id,
+            heading_2={
+                "rich_text": [
+                    {
+                        "type": "text",
+                        "text": {"content": new_title},
+                    }
+                ]
+            },
+        )
+        print(f"블록 ID {block_id} 업데이트 완료: {new_title}")
+    except Exception as e:
+        print(f"블록 업데이트 중 오류 발생: {e}")
+
+''' 모든 블록 제거 함수
 def clear_all_blocks(page_id):
     try:
         blocks = notion.blocks.children.list(block_id=page_id)["results"]
@@ -315,7 +391,7 @@ def clear_all_blocks(page_id):
         print("모든 블록 삭제 완료")
     except Exception as e:
         print(f"블록 삭제 중 오류 발생: {e}")
-
+'''
 # 오늘의 묵상
 def update_today_page(qt_schedule, book_map):
     today = datetime.now().strftime("%m.%d")
@@ -323,9 +399,9 @@ def update_today_page(qt_schedule, book_map):
     print(f"[DEBUG] 오늘의 QT 데이터: {today_info}")  # 디버깅
 
     old_testament = format_bible_verses(today_info["old"], book_map)
-    print(f"[DEBUG] 오늘의 구약: {old_testament}")  # 디버깅
+    #print(f"[DEBUG] 오늘의 구약: {old_testament}")  # 디버깅
     new_testament = format_bible_verses(today_info["new"], book_map)
-    print(f"[DEBUG] 오늘의 신약: {new_testament}")  # 디버깅
+    #print(f"[DEBUG] 오늘의 신약: {new_testament}")  # 디버깅
 
     old_blocks = [
         {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": block}}]}}
@@ -347,26 +423,21 @@ def update_today_page(qt_schedule, book_map):
     )
     content_blocks.extend(new_blocks)
 
-    create_or_update_page("오늘의 묵상", content_blocks, PARENT_PAGE_ID, bible_icon)
+    # 기존 "오늘의 묵상" 페이지 업데이트
+    update_existing_page(PAGE_IDS["오늘의 묵상"], content_blocks)
 
 # 금주의 묵상
 def update_weekly_pages(qt_schedule, book_map):
     now = datetime.now()
-    first_day_of_month = datetime(now.year, now.month, 1)
-    week_number_in_month = ((now - first_day_of_month).days // 7) + 1
-    week_title = f"금주의 묵상 ({now.strftime('%m월')} {week_number_in_month}주차)"
-
-    create_heading_2_block(PARENT_PAGE_ID, week_title)
-
     for i, day in enumerate(["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"], start=1):
         day_date = (now + timedelta(days=i - now.weekday() - 1)).strftime("%m.%d")
         day_info = qt_schedule.get(day_date, {"old": None, "new": None})
         print(f"[DEBUG] {day} ({day_date}): {day_info}")  # 디버깅
 
         old_testament = format_bible_verses(day_info["old"], book_map)
-        print(f"[DEBUG] {day} 구약: {old_testament}")  # 디버깅
+        #print(f"[DEBUG] {day} 구약: {old_testament}")  # 디버깅
         new_testament = format_bible_verses(day_info["new"], book_map)
-        print(f"[DEBUG] {day} 신약: {new_testament}")  # 디버깅
+        #print(f"[DEBUG] {day} 신약: {new_testament}")  # 디버깅
 
         old_blocks = [
             {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": block}}]}}
@@ -388,19 +459,14 @@ def update_weekly_pages(qt_schedule, book_map):
         )
         content_blocks.extend(new_blocks)
 
-        create_or_update_page(f"{day} ({day_date})", content_blocks, PARENT_PAGE_ID, bible_icon)
+        # 기존 요일 페이지 업데이트
+        update_existing_page(PAGE_IDS[day], content_blocks, new_title=f"{day} ({day_date})")
 
 # 메인 실행
 if __name__ == "__main__":
     book_map = load_book_map(csv_file_path)
     qt_schedule = parse_qt_data(qt_data)
-    print("QT 스케줄 데이터:", qt_schedule)  # qt_schedule 데이터 전체 출력
-
-    clear_all_blocks(PARENT_PAGE_ID)
-    create_heading_2_block(PARENT_PAGE_ID, f"오늘은 {datetime.now().strftime('%m월 %d일')}입니다 🍀")
+    
+    update_block_date(today_block_id)
     update_today_page(qt_schedule, book_map)
-    create_divider_block(PARENT_PAGE_ID)
     update_weekly_pages(qt_schedule, book_map)
-    for i in range(6):
-        create_empty_block(PARENT_PAGE_ID)
-    create_link_block(PARENT_PAGE_ID, "<<패치노트>>", "https://www.notion.so/sba-qt/1480f7e0cd5f805582a4fca580a84744?pvs=4")
