@@ -20,6 +20,30 @@ def load_book_map(csv_file):
             }
     return book_map
 
+def load_reading_schedule(csv_file):
+    """
+    CSV 파일에서 통독 일정을 읽어옵니다.
+    :param csv_file: CSV 파일 경로
+    :return: 딕셔너리 형태의 일정 데이터
+    """
+    schedule = {}
+    with open(csv_file, mode="r", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            month = int(row["month"])
+            day = int(row["day"])
+            chapter = row["chapter"].strip()
+            verse = row["verse"].strip()
+
+            # 'MM.DD' 형태의 키 생성
+            date_key = f"{month:02}.{day:02}"
+            if chapter == "없음" or verse == "없음":
+                schedule[date_key] = {"old": None, "new": None}
+            else:
+                schedule[date_key] = {"old": None, "new": f"{chapter}{verse}"}
+    return schedule
+
+
 # 다중 범위 계산 함수수
 def calculate_chapter_range(start, end, book_map):
     """

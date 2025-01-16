@@ -1,4 +1,4 @@
-# qt_data 텍스트 파일에서 불러오기
+''' qt_data 텍스트 파일에서 불러오기
 def read_qt_data(file_path):
     """
     qt_data.txt 파일에서 QT 일정 데이터를 읽어옵니다.
@@ -14,8 +14,9 @@ def read_qt_data(file_path):
         return ["qt_data.txt 파일을 찾을 수 없습니다."]
     except Exception as e:
         return [f"파일 읽기 중 오류가 발생했습니다: {str(e)}"]
+'''
 
-# QT 데이터를 파싱하여 딕셔너리로 변환
+''' QT 데이터를 파싱하여 딕셔너리로 변환
 def parse_qt_data(data):
     """
     QT 데이터를 파싱하여 일정 딕셔너리로 변환합니다.
@@ -49,4 +50,4 @@ def parse_qt_data(data):
         except ValueError as e:
             print(f"[ERROR] Parsing error for line: {line} -> {e}")
     
-    return qt_schedule
+    return qt_schedule'''
