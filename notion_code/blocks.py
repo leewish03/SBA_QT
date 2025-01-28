@@ -69,21 +69,28 @@ def create_link_block(parent_page_id, link_text, link_url):
         print(f"링크 블록 추가 중 오류 발생: {e}")
 
 # 페이지 내용 업데이트 함수
-def update_existing_page(page_id, content_blocks, new_title=None):
+def update_existing_page(page_id, content_blocks, new_title=None, new_icon=None):
     """
     기존 페이지의 내용을 업데이트합니다.
 
     :param page_id: 기존 페이지의 ID
     :param content_blocks: 업데이트할 블록의 목록
     :param new_title: 페이지 제목을 업데이트할 경우 새 제목
+    :param new_icon: 페이지 아이콘을 업데이트할 경우 새 아이콘 (URL 또는 Emoji)
     """
     try:
-        # 페이지 제목 업데이트 (옵션)
+        # 페이지 제목 및 아이콘 업데이트 (옵션)
+        update_data = {}
         if new_title:
-            notion.pages.update(page_id, properties={
+            update_data["properties"] = {
                 "title": [{"type": "text", "text": {"content": new_title}}],
-            })
-            print(f"페이지 제목 업데이트 완료: {new_title}")
+            }
+        if new_icon:
+            update_data["icon"] = {"type": "external", "external": {"url": new_icon}}
+        
+        if update_data:
+            notion.pages.update(page_id, **update_data)
+            print(f"페이지 제목 및 아이콘 업데이트 완료: {new_title}, {new_icon}")
 
         # 기존 블록 삭제
         existing_blocks = notion.blocks.children.list(block_id=page_id)["results"]
