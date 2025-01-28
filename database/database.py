@@ -1,6 +1,9 @@
 import sqlite3
 import csv
+import re
+from datetime import datetime, timedelta
 from config.settings import db_path
+from qt.parse import find_qt_chapter_verse, days_since_start
 
 # CSV 파일에서 성경 책 이름 매핑 읽기
 def load_book_map(csv_file):
@@ -20,31 +23,49 @@ def load_book_map(csv_file):
             }
     return book_map
 
-def load_reading_schedule(csv_file):
+def load_reading_schedule(csv_file, qt_plan_path, book_map, start_date):
     """
     CSV 파일에서 통독 일정을 읽어옵니다.
     :param csv_file: CSV 파일 경로
+    :param qt_plan_path: QT 계획 CSV 파일 경로
+    :param book_map: 책 이름 매핑 데이터 (dict 형태)
+    :param start_date: QT 시작 날짜
     :return: 딕셔너리 형태의 일정 데이터
     """
     schedule = {}
     with open(csv_file, mode="r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            month = int(row["month"])
-            day = int(row["day"])
-            chapter = row["chapter"].strip()
-            verse = row["verse"].strip()
+            try:
+                # 날짜 생성 및 검증
+                month = int(row["month"])
+                day = int(row["day"])
+                target_date = datetime(2025, month, day)  # 잘못된 날짜는 ValueError 발생
 
-            # 'MM.DD' 형태의 키 생성
-            date_key = f"{month:02}.{day:02}"
-            if chapter == "없음" or verse == "없음":
-                schedule[date_key] = {"old": None, "new": None}
-            else:
-                schedule[date_key] = {"old": None, "new": f"{chapter}{verse}"}
+                # days_elapsed 계산
+                days_elapsed = days_since_start(start_date, target_date)
+
+                # old 값 계산
+                qt_chapter, qt_verse = find_qt_chapter_verse(days_elapsed, qt_plan_path, book_map)
+                old_value = f"{qt_chapter}{qt_verse}" if qt_chapter and qt_verse else None
+
+                # new 값 설정
+                chapter = row["chapter"].strip()
+                verse = row["verse"].strip()
+                new_value = None if chapter == "없음" or verse == "없음" else f"{chapter}{verse}"
+
+                # 'MM.DD' 키 생성
+                date_key = f"{month:02}.{day:02}"
+                schedule[date_key] = {"old": old_value, "new": new_value}
+
+            except ValueError as e:
+                print(f"Invalid date in row: {row} -> {e}")
+            except Exception as e:
+                print(f"Error processing row: {row} -> {e}")
+
     return schedule
 
-
-# 다중 범위 계산 함수수
+'''다중 범위 계산 함수수
 def calculate_chapter_range(start, end, book_map):
     """
     여러 책과 장 범위를 계산하여 반환합니다.
@@ -86,8 +107,8 @@ def calculate_chapter_range(start, end, book_map):
             chapter_range.append((book_name, None))  # None은 모든 장을 의미
 
     return chapter_range
-
-# 여러 책과 장의 데이터를 가져오는 함수
+'''
+'''여러 책과 장의 데이터를 가져오는 함수
 def fetch_range_verses(chapter_range, book_map):
     """
     범위 데이터에 맞는 구절을 가져옴.
@@ -116,7 +137,7 @@ def fetch_range_verses(chapter_range, book_map):
 
     conn.close()
     return result
-
+'''
 # 성경 구절 형식화 함수
 def format_bible_verses(book_and_chapters, book_map, cursor):
     if not book_and_chapters:
@@ -170,10 +191,10 @@ def fetch_and_format_chapter(book_name, book_map, chapter, cursor):
 
     # 데이터베이스 조회
     cursor.execute("""
-        SELECT paragraph, sentence 
-        FROM bible2 
-        WHERE book = ? AND chapter = ? 
-        ORDER BY paragraph;
+        SELECT chapter, verse, content
+        FROM bible_korHRV
+        WHERE book = ? AND chapter = ?
+        ORDER BY verse;
     """, (book_id, chapter))
     verses = cursor.fetchall()
 
@@ -185,11 +206,11 @@ def fetch_and_format_chapter(book_name, book_map, chapter, cursor):
     chapter_title = f"{full_name} {chapter}장"
     formatted_output = [chapter_title]
 
-    # 절 묶기 (10개씩 묶어서 출력)
+    # 절 묶기
     current_block = ""
-    for i, (paragraph, sentence) in enumerate(verses, start=1):
-        current_block += f"{paragraph} {sentence} "
-        if i % 30 == 0:  # 30개 절마다 블록 생성
+    for i, (chapter, verse, content) in enumerate(verses, start=1):
+        current_block += f"{verse} {content} "
+        if i % 25 == 0:  # 25개 절마다 블록 생성
             formatted_output.append(current_block.strip())
             current_block = ""
 

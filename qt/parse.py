@@ -51,3 +51,80 @@ def parse_qt_data(data):
             print(f"[ERROR] Parsing error for line: {line} -> {e}")
     
     return qt_schedule'''
+
+from datetime import datetime, timedelta
+import csv
+
+start_date = "2024-12-17"  # 시작 날짜
+
+def days_since_start(start_date, target_date):
+    """
+    주어진 시작 날짜로부터 목표 날짜까지의 경과 일수를 계산하되, 일요일은 제외.
+
+    Parameters:
+    start_date (str): 시작 날짜 (형식: YYYY-MM-DD).
+    target_date (str or datetime): 목표 날짜 (형식: YYYY-MM-DD 또는 datetime 객체).
+
+    Returns:
+    int: 경과한 일수 (일요일 제외).
+    """
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    
+    # target_date가 문자열이면 datetime으로 변환
+    if isinstance(target_date, str):
+        target = datetime.strptime(target_date, "%Y-%m-%d")
+    elif isinstance(target_date, datetime):
+        target = target_date
+    else:
+        raise TypeError("target_date must be either a string or datetime object.")
+
+    # 경과한 모든 날짜 계산
+    delta_days = (target - start).days + 1  # 시작일 포함
+
+    # 일요일 개수 계산
+    sundays = sum(1 for day in range(delta_days) if (start + timedelta(days=day)).weekday() == 6)
+
+    # 일요일 제외한 경과일 반환
+    return delta_days - sundays
+
+
+def find_qt_chapter_verse(number, qt_plan_path, book_map):
+    """
+    주어진 숫자에 해당하는 QT의 장(chapter)과 절(verse)을 찾는 함수.
+
+    Parameters:
+    number (int): 찾고자 하는 번째 숫자.
+    qt_plan_path (str): QT 데이터 경로.
+    book_map (dict): 책 이름 매핑 데이터.
+
+    Returns:
+    tuple: (qt_chapter, qt_verse) 형태로 반환.
+    """
+    count = 0
+
+    # qt_plan 읽기
+    with open(qt_plan_path, 'r', encoding='utf-8') as qt_file:
+        qt_reader = csv.DictReader(qt_file)
+        qt_plan = list(qt_reader)
+
+    # qt_plan 데이터 순회
+    for row in qt_plan:
+        idx = int(row['idx'])
+        chapter = row['chaper']
+        start_paragraph = int(row['start_paragraph'])
+        end_paragraph = int(row['end_paragraph'])
+        paragraphs_in_index = end_paragraph - start_paragraph + 1
+
+        # 현재 인덱스 내 범위 확인
+        if count + paragraphs_in_index >= number:
+            verse = start_paragraph + (number - count - 1)
+
+            # book_map에서 chapter에 해당하는 korean_name 찾기
+            for key, book in book_map.items():
+                if book['full_name'] == chapter:
+                    qt_chapter = key
+                    return qt_chapter, verse
+
+        count += paragraphs_in_index
+
+    return None, None  # 숫자가 범위를 벗어나는 경우

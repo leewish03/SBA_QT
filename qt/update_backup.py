@@ -1,10 +1,12 @@
 import sqlite3
 from datetime import datetime, timedelta
-from config.settings import db_path, bible_icon, bible_icon_local
+from config.settings import db_path
 from notion_code.settings import PAGE_IDS
 from database.database import fetch_and_format_chapter, format_bible_verses
 from notion_code.blocks import update_existing_page
 
+
+# 오늘의 묵상
 def update_today_page(qt_schedule, book_map):
     today = datetime.now().strftime("%m.%d")
     today_info = qt_schedule.get(today, {"old": None, "new": None})
@@ -12,8 +14,8 @@ def update_today_page(qt_schedule, book_map):
     conn = sqlite3.connect(db_path)  # 데이터베이스 연결
     cursor = conn.cursor()  # 커서 생성
 
-    old_testament = handle_exceptions(today_info["old"], book_map, cursor)
-    new_testament = handle_exceptions(today_info["new"], book_map, cursor)
+    old_testament = format_bible_verses(today_info["old"], book_map, cursor)
+    new_testament = format_bible_verses(today_info["new"], book_map, cursor)
 
     old_blocks = [
         {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": block}}]}}
@@ -35,25 +37,23 @@ def update_today_page(qt_schedule, book_map):
     )
     content_blocks.extend(new_blocks)
 
-    update_existing_page(PAGE_IDS["오늘의 묵상"], content_blocks, None, new_icon=bible_icon)
+    # 기존 "오늘의 묵상" 페이지 업데이트
+    update_existing_page(PAGE_IDS["오늘의 묵상"], content_blocks)
 
-    conn.close()
+    conn.close()  # 데이터베이스 연결 종료
 
+# 금주의 묵상
 def update_weekly_pages(qt_schedule, book_map):
     now = datetime.now()
     conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    cursor = conn.cursor()  # SQLite 커서 생성
 
     for i, day in enumerate(["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"], start=1):
         day_date = (now + timedelta(days=i - now.weekday() - 1)).strftime("%m.%d")
         day_info = qt_schedule.get(day_date, {"old": None, "new": None})
 
-        # 일요일 old는 '없음'
-        if day == "일요일":
-            day_info["old"] = "없음"
-
-        old_testament = handle_exceptions(day_info["old"], book_map, cursor)
-        new_testament = handle_exceptions(day_info["new"], book_map, cursor)
+        old_testament = format_bible_verses(day_info["old"], book_map, cursor)
+        new_testament = format_bible_verses(day_info["new"], book_map, cursor)
 
         old_blocks = [
             {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": block}}]}}
@@ -75,21 +75,7 @@ def update_weekly_pages(qt_schedule, book_map):
         )
         content_blocks.extend(new_blocks)
 
-        update_existing_page(PAGE_IDS[day], content_blocks, new_title=f"{day} ({day_date})", new_icon=bible_icon)
+        # 기존 요일 페이지 업데이트
+        update_existing_page(PAGE_IDS[day], content_blocks, new_title=f"{day} ({day_date})")
 
-    conn.close()
-
-def handle_exceptions(reference, book_map, cursor):
-    if reference in ("욥,욘", "딛,몬", "요이,요삼,유"):
-        books = {
-            "욥,욘": ["욥기", "요나"],
-            "딛,몬": ["디도서", "빌레몬서"],
-            "요이,요삼,유": ["요한이서", "요한삼서", "유다서"]
-        }
-        chapters = []
-        for book in books[reference]:
-            chapters.extend(fetch_and_format_chapter(book, book_map, cursor))
-        return chapters
-    elif reference:
-        return format_bible_verses(reference, book_map, cursor)
-    return ["없음"]
+    conn.close()  # 데이터베이스 연결 종료
