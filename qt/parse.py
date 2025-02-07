@@ -110,7 +110,7 @@ def find_qt_chapter_verse(number, qt_plan_path, book_map):
     # qt_plan 데이터 순회
     for row in qt_plan:
         idx = int(row['idx'])
-        chapter = row['chaper']
+        chapter = row['chapter']
         start_paragraph = int(row['start_paragraph'])
         end_paragraph = int(row['end_paragraph'])
         paragraphs_in_index = end_paragraph - start_paragraph + 1
