@@ -209,7 +209,7 @@ def fetch_and_format_chapter(book_name, book_map, chapter, cursor):
     # 절 묶기
     current_block = ""
     for i, (chapter, verse, content) in enumerate(verses, start=1):
-        current_block += f"{verse} {content} "
+        current_block += f"{verse} {content}\n"
         if i % 25 == 0:  # 25개 절마다 블록 생성
             formatted_output.append(current_block.strip())
             current_block = ""
