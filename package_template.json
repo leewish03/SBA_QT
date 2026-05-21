@@ -1,0 +1,14 @@
+{
+  "name": "sba-qt-backend",
+  "version": "1.0.0",
+  "description": "SBA QT Web App Backend",
+  "main": "server_template.js",
+  "scripts": {
+    "start": "node server_template.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "googleapis": "^122.0.0"
+  }
+}

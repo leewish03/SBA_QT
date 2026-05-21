@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+test-app/node_modules/
+
+# Production build outputs
+dist/
+test-app/dist/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Zip archives
+*.zip
+
+# Sensitive Service Account Keys
+cbf-praylist-*.json
+**/cbf-praylist-*.json
