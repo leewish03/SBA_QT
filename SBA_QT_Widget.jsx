@@ -690,6 +690,16 @@ const SbaStyledWrapper = styled.div`
     animation: flash-focus 2s ease-out;
 }
 
+/* 묵상 공유 작성 폼 추가 스타일 */
+.sba-sharing-write-box {
+    background: var(--sba-card-bg);
+    border: 1px solid var(--sba-border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+}
+
 `;
 
 // ==========================================
@@ -1093,7 +1103,7 @@ const ICONS = {
     sharing: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 };
 
-function TopHeader({ currentDate, onOpenCalendar, isDark, onToggleDark, session, onOpenAuth }) {
+function TopHeader({ currentDate, onOpenCalendar, isDark, onToggleDark, session, onOpenAuth, onOpenAdmin }) {
     const month = currentDate.getMonth() + 1;
     const day = currentDate.getDate();
     const days = ["일", "월", "화", "수", "목", "금", "토"];
@@ -1140,6 +1150,13 @@ function TopHeader({ currentDate, onOpenCalendar, isDark, onToggleDark, session,
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
                     )}
                 </button>
+
+                {/* 관리자 설정 버튼 */}
+                {session?.user?.email === 'lekas1217@gmail.com' && (
+                    <button className="sba-header-icon" onClick={onOpenAdmin} title="관리자 설정" style={{width:'32px', height:'32px', padding:0}}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    </button>
+                )}
 
                 {/* 소셜 로그인 / 사용자 정보 */}
                 {session ? (
@@ -1196,9 +1213,10 @@ function AppFooter() {
 // ==========================================
 // 1. 메모(QT 노트) 에디터 컴포넌트
 // ==========================================
-function NoteEditor({ targetDate, session }) {
+function NoteEditor({ targetDate, session, passage, verses }) {
   const [content, setContent] = useState('');
   const [saveStatus, setSaveStatus] = useState('저장 완료'); // '저장 완료', '저장 중...', '저장 오류'
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const timerRef = useRef(null);
   const isDirtyRef = useRef(false);
 
@@ -1330,7 +1348,18 @@ function NoteEditor({ targetDate, session }) {
 
   return (
     <div className="sba-note-section">
-      <h3>오늘의 메모 (QT 노트)</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h3 style={{ margin: 0 }}>오늘의 메모 (QT 노트)</h3>
+        {verses && (
+          <button 
+            onClick={() => setIsImageModalOpen(true)}
+            className="sba-action-link"
+            style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--sba-primary)', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            🎨 말씀 카드 만들기
+          </button>
+        )}
+      </div>
       <textarea
         className="sba-note-textarea"
         placeholder="오늘 말씀에서 깨달은 은혜와 묵상 내용을 기록해 보세요..."
@@ -1342,6 +1371,13 @@ function NoteEditor({ targetDate, session }) {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>
         <span>{saveStatus}</span>
       </div>
+
+      <ImageCardModal 
+        isOpen={isImageModalOpen} 
+        onClose={() => setIsImageModalOpen(false)} 
+        passage={passage} 
+        verses={verses} 
+      />
     </div>
   );
 }
@@ -1568,7 +1604,12 @@ function TabToday({ todayPlan, session, addToast, onBookmarkChange }) {
         addToast={addToast}
         onBookmarkChange={onBookmarkChange}
       />
-      <NoteEditor targetDate={todayPlan.dateObj} session={session} />
+      <NoteEditor 
+        targetDate={todayPlan.dateObj} 
+        session={session} 
+        passage={`${SHORT_TO_FULL[abbrev] || abbrev} ${verse}장`} 
+        verses={verses} 
+      />
     </div>
   );
 }
@@ -1673,7 +1714,12 @@ function TabReading({ todayPlan, session, addToast, onBookmarkChange }) {
           />
         </div>
       ))}
-      <NoteEditor targetDate={todayPlan.dateObj} session={session} />
+      <NoteEditor 
+        targetDate={todayPlan.dateObj} 
+        session={session} 
+        passage={todayPlan.new ? `${todayPlan.new.books.map(b => SHORT_TO_FULL[b] || b).join(', ')} ${todayPlan.new.verseRaw}장` : '통독 말씀'} 
+        verses={blocks.length > 0 ? blocks[0].verses : null} 
+      />
     </div>
   );
 }
@@ -1781,57 +1827,628 @@ function TabBookmarks({ onNavigateToVerse, updateTrigger }) {
 // ==========================================
 // 6. SharingTab (나눔 탭 + 로딩 스켈레톤 및 예외처리)
 // ==========================================
-function SharingTab({ isDark }) {
+// ==========================================
+// 6. SharingTab (자체 묵상 나눔 피드 및 댓글 피드 + 관리자 삭제 지원)
+// ==========================================
+function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
+  const [reflections, setReflections] = useState([]);
+  const [comments, setComments] = useState({}); // { reflectionId: [] }
+  const [likes, setLikes] = useState({}); // { reflectionId: { count: 0, liked: false } }
   const [loading, setLoading] = useState(true);
-  const [timeoutError, setTimeoutError] = useState(false);
-  const iframeRef = useRef(null);
+  const [content, setContent] = useState('');
+  const [passage, setPassage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [activeCommentId, setActiveCommentId] = useState(null); // 댓글창 열린 글 ID
+  const [newCommentText, setNewCommentText] = useState({}); // { reflectionId: '' }
 
-  useEffect(() => {
-    // 10초 타임아웃 타이머
-    const timer = setTimeout(() => {
-      if (loading) {
-        setLoading(false);
-        setTimeoutError(true);
-      }
-    }, 10000);
+  const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
 
-    return () => clearTimeout(timer);
-  }, [loading]);
-
-  const handleLoad = () => {
-    setLoading(false);
+  // 오늘 날짜 계산
+  const getTodayDateStr = () => {
+    const d = new Date();
+    // 오전 5시 기준 변경 정책 적용
+    if (d.getHours() < 5) d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0];
   };
 
-  const iframeSrc = `https://joey.team/block/?id=6gzZZCkcb0Y9up7wcgIGKybikFb2&block_id=YIRdJxInnDpsBJOGdDXO${isDark ? '&theme=dark' : ''}`;
+  const todayStr = getTodayDateStr();
+
+  // 1. 나눔 글 목록 가져오기
+  const loadReflections = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('qt_shared_reflections')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setReflections(data || []);
+
+      // 각 글의 댓글 수 및 좋아요 수 초기화
+      if (data) {
+        data.forEach(async (r) => {
+          await loadComments(r.id);
+          await loadLikes(r.id);
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      addToast('나눔 피드를 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2. 특정 글의 댓글 패치
+  const loadComments = async (reflectionId) => {
+    try {
+      const { data, error } = await supabase
+        .from('qt_comments')
+        .select('*')
+        .eq('reflection_id', reflectionId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setComments(prev => ({ ...prev, [reflectionId]: data || [] }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // 3. 특정 글의 좋아요 상태 패치
+  const loadLikes = async (reflectionId) => {
+    try {
+      const { data: list, error } = await supabase
+        .from('qt_likes')
+        .select('user_id')
+        .eq('reflection_id', reflectionId);
+
+      if (error) throw error;
+      const count = list?.length || 0;
+      const liked = list?.some(l => l.user_id === session?.user?.id) || false;
+
+      setLikes(prev => ({
+        ...prev,
+        [reflectionId]: { count, liked }
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    loadReflections();
+  }, [session]);
+
+  // 내 오늘 메모 가져오기
+  const handleImportMemo = () => {
+    if (!session) {
+      addToast('로그인이 필요한 기능입니다.');
+      onOpenAuthModal();
+      return;
+    }
+    try {
+      const raw = localStorage.getItem('sba_qt_notes');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed[todayStr] && parsed[todayStr].content) {
+          setContent(parsed[todayStr].content);
+          addToast('오늘의 묵상 노트를 성공적으로 불러왔습니다.');
+          return;
+        }
+      }
+      addToast('오늘 기록된 묵상 메모가 없습니다.');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // 글 등록
+  const handleSubmitReflection = async (e) => {
+    e.preventDefault();
+    if (!session) {
+      addToast('로그인이 필요한 기능입니다.');
+      onOpenAuthModal();
+      return;
+    }
+    if (!content.trim()) {
+      alert('묵상 내용을 입력해 주세요.');
+      return;
+    }
+    if (!passage.trim()) {
+      alert('말씀 구절을 입력해 주세요.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const authorName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email.split('@')[0];
+      const { error } = await supabase
+        .from('qt_shared_reflections')
+        .insert({
+          user_id: session.user.id,
+          author_name: authorName,
+          author_email: session.user.email,
+          target_date: todayStr,
+          passage: passage,
+          content: content
+        });
+
+      if (error) throw error;
+      setContent('');
+      setPassage('');
+      addToast('묵상이 피드에 성공적으로 공유되었습니다.');
+      loadReflections();
+    } catch (err) {
+      console.error(err);
+      alert('공유 실패: ' + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 댓글 등록
+  const handleSubmitComment = async (reflectionId) => {
+    if (!session) {
+      addToast('로그인이 필요한 기능입니다.');
+      onOpenAuthModal();
+      return;
+    }
+    const text = newCommentText[reflectionId] || '';
+    if (!text.trim()) return;
+
+    try {
+      const authorName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email.split('@')[0];
+      const { error } = await supabase
+        .from('qt_comments')
+        .insert({
+          reflection_id: reflectionId,
+          user_id: session.user.id,
+          author_name: authorName,
+          author_email: session.user.email,
+          content: text
+        });
+
+      if (error) throw error;
+      setNewCommentText(prev => ({ ...prev, [reflectionId]: '' }));
+      addToast('댓글이 등록되었습니다.');
+      loadComments(reflectionId);
+    } catch (err) {
+      console.error(err);
+      alert('댓글 등록 실패: ' + err.message);
+    }
+  };
+
+  // 좋아요 토글
+  const handleToggleLike = async (reflectionId) => {
+    if (!session) {
+      addToast('로그인이 필요한 기능입니다.');
+      onOpenAuthModal();
+      return;
+    }
+    const currentLike = likes[reflectionId] || { count: 0, liked: false };
+    
+    try {
+      if (currentLike.liked) {
+        // 좋아요 취소
+        const { error } = await supabase
+          .from('qt_likes')
+          .delete()
+          .eq('reflection_id', reflectionId)
+          .eq('user_id', session.user.id);
+
+        if (error) throw error;
+        setLikes(prev => ({
+          ...prev,
+          [reflectionId]: { count: Math.max(0, currentLike.count - 1), liked: false }
+        }));
+      } else {
+        // 좋아요 추가
+        const { error } = await supabase
+          .from('qt_likes')
+          .insert({
+            reflection_id: reflectionId,
+            user_id: session.user.id
+          });
+
+        if (error) throw error;
+        setLikes(prev => ({
+          ...prev,
+          [reflectionId]: { count: currentLike.count + 1, liked: true }
+        }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // 게시물 삭제 (관리자 또는 본인)
+  const handleDeleteReflection = async (id) => {
+    if (!confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
+    try {
+      const { error } = await supabase
+        .from('qt_shared_reflections')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      addToast('게시글이 성공적으로 삭제되었습니다.');
+      setReflections(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert('삭제 실패: ' + err.message);
+    }
+  };
+
+  // 댓글 삭제 (관리자 또는 본인)
+  const handleDeleteComment = async (commentId, reflectionId) => {
+    if (!confirm('정말로 이 댓글을 삭제하시겠습니까?')) return;
+    try {
+      const { error } = await supabase
+        .from('qt_comments')
+        .delete()
+        .eq('id', commentId);
+
+      if (error) throw error;
+      addToast('댓글이 삭제되었습니다.');
+      loadComments(reflectionId);
+    } catch (err) {
+      console.error(err);
+      alert('댓글 삭제 실패: ' + err.message);
+    }
+  };
 
   return (
-    <div className="sba-tab-content" style={{ padding: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 160px)', position: 'relative' }}>
-      {loading && (
-        <div className="sba-skeleton-container" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5 }}>
-          <div className="sba-skeleton-box" style={{ width: '80%', height: '32px', marginBottom: '16px' }} />
-          <div className="sba-skeleton-box" style={{ width: '100%', height: '140px', marginBottom: '16px' }} />
-          <div className="sba-skeleton-box" style={{ width: '90%', height: '18px', marginBottom: '8px' }} />
-          <div className="sba-skeleton-box" style={{ width: '95%', height: '18px', marginBottom: '8px' }} />
-          <div className="sba-skeleton-box" style={{ width: '60%', height: '18px', marginBottom: '24px' }} />
-          <div className="sba-skeleton-box" style={{ width: '100%', height: '180px' }} />
-        </div>
-      )}
+    <div className="sba-tab-content">
+      {/* 묵상 작성 폼 */}
+      <div className="sba-sharing-write-box">
+        <h3 style={{ margin: '0 0 12px 0' }}>오늘의 묵상 공유하기</h3>
+        
+        {!session ? (
+          <div 
+            onClick={onOpenAuthModal}
+            style={{
+              background: 'var(--sba-card-sub-bg)',
+              border: '1px dashed var(--sba-border)',
+              borderRadius: '8px',
+              padding: '24px',
+              textAlign: 'center',
+              cursor: 'pointer',
+              color: 'var(--sba-text-secondary)'
+            }}
+          >
+            🔒 묵상 나눔은 로그인이 필요한 기능입니다.<br />
+            <span style={{ fontSize: '0.8rem', color: 'var(--sba-primary)', fontWeight: 'bold', textDecoration: 'underline' }}>
+              소셜 로그인으로 1초 만에 로그인하기
+            </span>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmitReflection} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input 
+                type="text" 
+                className="sba-input"
+                style={{ flex: 1, margin: 0 }}
+                placeholder="예: 마태복음 1:1"
+                value={passage}
+                onChange={e => setPassage(e.target.value)}
+              />
+              <button 
+                type="button" 
+                className="sba-btn" 
+                style={{ marginTop: 0, padding: '0 12px', fontSize: '0.85rem', whiteSpace: 'nowrap', background: 'var(--sba-card-sub-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border)' }}
+                onClick={handleImportMemo}
+              >
+                ✏️ 내 메모 긁어오기
+              </button>
+            </div>
+            
+            <textarea 
+              className="sba-note-textarea"
+              style={{ minHeight: '80px', margin: 0 }}
+              placeholder="오늘 나에게 주신 은혜와 결단한 점을 나누어 보세요..."
+              value={content}
+              onChange={e => setContent(e.target.value)}
+            />
+            
+            <button 
+              type="submit" 
+              className="sba-btn" 
+              style={{ marginTop: 0, background: 'var(--sba-text)', color: 'var(--sba-bg)' }}
+              disabled={submitting}
+            >
+              {submitting ? '공유 중...' : '피드에 공유하기'}
+            </button>
+          </form>
+        )}
+      </div>
 
-      {timeoutError ? (
-        <div className="sba-retry-container">
-          <div className="sba-retry-title">나눔 공간을 불러오지 못했습니다</div>
-          <div className="sba-retry-desc">네트워크 연결 상태를 확인하고 아래 버튼을 다시 클릭해 보세요.</div>
-          <button className="sba-btn" onClick={() => { setTimeoutError(false); setLoading(true); }}>재시도</button>
-        </div>
+      <h2 className="sba-verse-title" style={{ borderLeft: 'none', margin: '24px 0 16px 0' }}>지체들의 나눔</h2>
+
+      {/* 피드 리스트 */}
+      {loading ? (
+        <div className="sba-loading">피드를 로딩하는 중...</div>
+      ) : reflections.length === 0 ? (
+        <div className="sba-empty-state">아직 오늘 작성된 묵션 나눔이 없습니다. 첫 번째 묵상 나눔을 남겨주세요!</div>
       ) : (
-        <iframe 
-          ref={iframeRef}
-          src={iframeSrc}
-          style={{ width: '100%', flex: 1, border: 'none', background: 'transparent' }}
-          title="Joey Sharing Block"
-          onLoad={handleLoad}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {reflections.map(r => {
+            const hasLiked = likes[r.id]?.liked || false;
+            const likeCount = likes[r.id]?.count || 0;
+            const refComments = comments[r.id] || [];
+            const isMyPost = session?.user?.id === r.user_id;
+            const showDelete = isMyPost || isAdmin;
+
+            return (
+              <div key={r.id} className="sba-weekly-card" style={{ cursor: 'default' }}>
+                <div className="sba-weekly-card-header" style={{ borderBottom: '1px solid var(--sba-border)', paddingBottom: '8px', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{r.author_name}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--sba-text-subtle)' }}>
+                      {new Date(r.created_at).toLocaleDateString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.8rem', background: 'var(--sba-card-sub-bg)', color: 'var(--sba-primary)', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
+                      {r.passage}
+                    </span>
+                    {showDelete && (
+                      <button 
+                        onClick={() => handleDeleteReflection(r.id)}
+                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', padding: '2px' }}
+                        title="삭제"
+                      >
+                        🗑️
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.95rem', lineHeight: '1.6', color: 'var(--sba-text)', whiteSpace: 'pre-wrap', margin: '12px 0' }}>
+                  {r.content}
+                </div>
+
+                {/* 반응 영역 */}
+                <div style={{ display: 'flex', gap: '16px', borderTop: '1px solid var(--sba-border)', paddingTop: '8px', fontSize: '0.85rem' }}>
+                  <button 
+                    onClick={() => handleToggleLike(r.id)}
+                    style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '4px', color: hasLiked ? '#ef4444' : 'var(--sba-text-secondary)', cursor: 'pointer' }}
+                  >
+                    <span>{hasLiked ? '❤️' : '🤍'}</span>
+                    <span>{likeCount}</span>
+                  </button>
+                  
+                  <button 
+                    onClick={() => setActiveCommentId(activeCommentId === r.id ? null : r.id)}
+                    style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--sba-text-secondary)', cursor: 'pointer' }}
+                  >
+                    <span>💬</span>
+                    <span>{refComments.length}</span>
+                  </button>
+                </div>
+
+                {/* 댓글 아코디언 */}
+                {activeCommentId === r.id && (
+                  <div style={{ borderTop: '1px solid var(--sba-border)', marginTop: '10px', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {refComments.map(c => {
+                      const isMyComment = session?.user?.id === c.user_id;
+                      const showCommentDelete = isMyComment || isAdmin;
+
+                      return (
+                        <div key={c.id} style={{ background: 'var(--sba-card-sub-bg)', padding: '8px 12px', borderRadius: '6px', fontSize: '0.85rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ fontWeight: 'bold' }}>{c.author_name}</span>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-subtle)' }}>
+                                {new Date(c.created_at).toLocaleDateString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              {showCommentDelete && (
+                                <button 
+                                  onClick={() => handleDeleteComment(c.id, r.id)}
+                                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: 0 }}
+                                >
+                                  ❌
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ color: 'var(--sba-text)', whiteSpace: 'pre-wrap' }}>{c.content}</div>
+                        </div>
+                      );
+                    })}
+
+                    {/* 댓글 쓰기 */}
+                    {!session ? (
+                      <div 
+                        onClick={onOpenAuthModal}
+                        style={{ fontSize: '0.8rem', textAlign: 'center', color: 'var(--sba-primary)', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
+                      >
+                        댓글 작성을 위해 로그인해 주세요.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                        <input 
+                          type="text" 
+                          className="sba-input"
+                          style={{ flex: 1, margin: 0, fontSize: '0.85rem', padding: '6px 12px' }}
+                          placeholder="댓글을 입력해 주세요..."
+                          value={newCommentText[r.id] || ''}
+                          onChange={e => setNewCommentText(prev => ({ ...prev, [r.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') handleSubmitComment(r.id); }}
+                        />
+                        <button 
+                          className="sba-btn" 
+                          style={{ marginTop: 0, fontSize: '0.8rem', padding: '0 12px' }}
+                          onClick={() => handleSubmitComment(r.id)}
+                        >
+                          등록
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
+    </div>
+  );
+}
+
+// ==========================================
+// 7. ImageCardModal (말씀 이미지 카드 생성 및 다운로드 모달)
+// ==========================================
+function ImageCardModal({ isOpen, onClose, passage, verses }) {
+  const [activeTheme, setActiveTheme] = useState('sunset'); // sunset, ocean, forest, charcoal, ivory
+  const cardRef = useRef(null);
+  
+  if (!isOpen) return null;
+
+  // 대표 구절 하나 혹은 처음 2개 구절만 요약해서 띄우기
+  let verseText = "말씀 데이터를 불러올 수 없습니다.";
+  if (verses) {
+    const verseList = Object.entries(verses);
+    if (verseList.length > 0) {
+      verseText = verseList.slice(0, 2).map(([num, text]) => `${num}. ${text}`).join(' ');
+      if (verseList.length > 2) {
+        verseText += " ...";
+      }
+    }
+  }
+
+  const themes = {
+    sunset: {
+      background: 'linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6)',
+      textColor: '#ffffff',
+      metaColor: 'rgba(255, 255, 255, 0.85)',
+      cardBg: 'rgba(0, 0, 0, 0.25)',
+      borderColor: 'rgba(255, 255, 255, 0.15)'
+    },
+    ocean: {
+      background: 'linear-gradient(135deg, #06b6d4, #3b82f6, #1e3a8a)',
+      textColor: '#ffffff',
+      metaColor: 'rgba(255, 255, 255, 0.85)',
+      cardBg: 'rgba(0, 0, 0, 0.25)',
+      borderColor: 'rgba(255, 255, 255, 0.15)'
+    },
+    forest: {
+      background: 'linear-gradient(135deg, #10b981, #064e3b, #022c22)',
+      textColor: '#ffffff',
+      metaColor: 'rgba(255, 255, 255, 0.85)',
+      cardBg: 'rgba(0, 0, 0, 0.25)',
+      borderColor: 'rgba(255, 255, 255, 0.15)'
+    },
+    charcoal: {
+      background: 'linear-gradient(135deg, #1f2937, #111827, #030712)',
+      textColor: '#f3f4f6',
+      metaColor: '#9ca3af',
+      cardBg: 'rgba(255, 255, 255, 0.03)',
+      borderColor: 'rgba(255, 255, 255, 0.08)'
+    },
+    ivory: {
+      background: 'linear-gradient(135deg, #fafaf9, #f5f5f4, #e7e5e4)',
+      textColor: '#1c1917',
+      metaColor: '#78716c',
+      cardBg: 'rgba(255, 255, 255, 0.6)',
+      borderColor: 'rgba(0, 0, 0, 0.05)'
+    }
+  };
+
+  const currentTheme = themes[activeTheme];
+
+  const handleDownload = async () => {
+    if (!cardRef.current) return;
+    try {
+      const canvas = await html2canvas(cardRef.current, {
+        useCORS: true,
+        scale: 2, // 해상도 높이기
+      });
+      const link = document.createElement('a');
+      link.download = `SBA_QT_${passage.replace(/\s+/g, '_')}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (e) {
+      console.error(e);
+      alert('이미지 생성에 실패했습니다.');
+    }
+  };
+
+  return (
+    <div className="sba-modal-overlay" onClick={onClose}>
+      <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '400px', padding: '20px'}}>
+        <h3 style={{marginTop: 0, marginBottom: '16px'}}>말씀 카드 다운로드</h3>
+        
+        {/* 카드 영역 */}
+        <div 
+          ref={cardRef} 
+          style={{
+            background: currentTheme.background,
+            padding: '40px 30px',
+            borderRadius: '16px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            aspectRatio: '4 / 5',
+            color: currentTheme.textColor,
+            fontFamily: "'Nanum Myeongjo', 'Georgia', serif",
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
+          <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', opacity: 0.7, color: currentTheme.metaColor }}>
+            SBA QT
+          </div>
+          
+          <div style={{ margin: '30px 0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <p style={{ fontSize: '1.25rem', lineHeight: '1.8', margin: 0, fontWeight: '500', wordBreak: 'keep-all', textAlign: 'center' }}>
+              “ {verseText} ”
+            </p>
+          </div>
+
+          <div style={{ borderTop: `1px solid ${currentTheme.borderColor}`, paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: currentTheme.textColor }}>
+              {passage}
+            </span>
+            <span style={{ fontSize: '0.75rem', color: currentTheme.metaColor }}>
+              서울북부교회 청년회
+            </span>
+          </div>
+        </div>
+
+        {/* 테마 셀렉터 */}
+        <div style={{marginTop: '20px', display: 'flex', justifyContent: 'space-around'}}>
+          {Object.keys(themes).map(themeName => (
+            <button 
+              key={themeName}
+              onClick={() => setActiveTheme(themeName)}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                border: activeTheme === themeName ? '2px solid var(--sba-text)' : '1px solid var(--sba-border)',
+                background: themes[themeName].background,
+                cursor: 'pointer',
+                boxShadow: 'inset 0 0 4px rgba(0,0,0,0.2)'
+              }}
+              title={themeName}
+            />
+          ))}
+        </div>
+
+        {/* 하단 버튼 */}
+        <div style={{display: 'flex', gap: '8px', marginTop: '24px'}}>
+          <button className="sba-btn" style={{flex: 1, marginTop: 0}} onClick={handleDownload}>
+            이미지 저장
+          </button>
+          <button className="sba-btn" style={{flex: 1, marginTop: 0, background: 'var(--sba-card-sub-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border)'}} onClick={onClose}>
+            닫기
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2508,7 +3125,12 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
             case 'sharing':
                 return (
                     <>
-                        <SharingTab isDark={isDark} />
+                        <SharingTab 
+                            session={session} 
+                            onOpenAuthModal={() => setShowAuth(true)} 
+                            addToast={addToast} 
+                            isDark={isDark} 
+                        />
                         <div onClick={handleAdminClick} style={{textAlign: 'center', color: 'var(--sba-text-subtle)', padding: '10px', fontSize: '0.8rem', cursor: 'pointer', userSelect: 'none'}}>
                             v5.2 (Supabase)
                         </div>
@@ -2542,6 +3164,7 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
                 onToggleDark={() => setIsDark(prev => !prev)}
                 session={session}
                 onOpenAuth={() => setShowAuth(true)}
+                onOpenAdmin={() => setShowAdmin(true)}
             />
             
             <main className="sba-content">

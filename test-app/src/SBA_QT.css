@@ -678,3 +678,13 @@
 .flash-focus {
     animation: flash-focus 2s ease-out;
 }
+
+/* 묵상 공유 작성 폼 추가 스타일 */
+.sba-sharing-write-box {
+    background: var(--sba-card-bg);
+    border: 1px solid var(--sba-border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+}

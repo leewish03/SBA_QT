@@ -348,7 +348,12 @@ export default function SBA_QT_App() {
             case 'sharing':
                 return (
                     <>
-                        <SharingTab isDark={isDark} />
+                        <SharingTab 
+                            session={session} 
+                            onOpenAuthModal={() => setShowAuth(true)} 
+                            addToast={addToast} 
+                            isDark={isDark} 
+                        />
                         <div onClick={handleAdminClick} style={{textAlign: 'center', color: 'var(--sba-text-subtle)', padding: '10px', fontSize: '0.8rem', cursor: 'pointer', userSelect: 'none'}}>
                             v5.2 (Supabase)
                         </div>
@@ -381,6 +386,7 @@ export default function SBA_QT_App() {
                 onToggleDark={() => setIsDark(prev => !prev)}
                 session={session}
                 onOpenAuth={() => setShowAuth(true)}
+                onOpenAdmin={() => setShowAdmin(true)}
             />
             
             <main className="sba-content">
