@@ -3704,12 +3704,38 @@ function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, addToast }
                 addToast('구글 스프레드시트 데이터가 즉시 강제 갱신(Purge)되었습니다.');
                 onClose();
             } else {
-                const errData = await res.json();
-                alert(`동기화 실패: ${errData.error || '알 수 없는 오류'}`);
+                let errorMsg = '알 수 없는 오류';
+                const contentType = res.headers.get('content-type') || '';
+                
+                if (contentType.includes('application/json')) {
+                    try {
+                        const errData = await res.json();
+                        errorMsg = errData.error || errData.message || JSON.stringify(errData);
+                    } catch (parseErr) {
+                        console.error('JSON parsing failed:', parseErr);
+                    }
+                } else {
+                    try {
+                        const textData = await res.text();
+                        errorMsg = textData || `상태 코드: ${res.status}`;
+                    } catch (parseErr) {
+                        console.error('Text parsing failed:', parseErr);
+                    }
+                }
+                
+                if (res.status === 401) {
+                    alert(`동기화 실패 (401 Unauthorized): 입력하신 관리자 토큰이 올바르지 않거나 만료되었습니다. 토큰 값을 다시 확인해 주세요.\n(상세 에러: ${errorMsg})`);
+                } else if (res.status === 403) {
+                    alert(`동기화 실패 (403 Forbidden): 이 요청을 수행할 권한이 없습니다.\n(상세 에러: ${errorMsg})`);
+                } else if (res.status === 500) {
+                    alert(`동기화 실패 (500 Internal Server Error): 서버 내부 오류가 발생했습니다. 구글 시트 API 연동을 확인해 주세요.\n(상세 에러: ${errorMsg})`);
+                } else {
+                    alert(`동기화 실패 (상태 코드 ${res.status}): ${errorMsg}`);
+                }
             }
         } catch (e) {
             console.error(e);
-            alert('API 호출 도중 오류가 발생했습니다.');
+            alert('API 호출 도중 오류가 발생했습니다. 네트워크 연결 상태를 확인해 주세요.');
         } finally {
             setSyncing(false);
         }
@@ -3891,8 +3917,6 @@ function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
         }
     }, [isOpen, currentDate]);
 
-    if (!isOpen) return null;
-
     useEffect(() => {
         try {
             const raw = localStorage.getItem('sba_qt_notes');
@@ -3905,6 +3929,8 @@ function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
             console.error(e);
         }
     }, [isOpen]);
+
+    if (!isOpen) return null;
 
     const getDaysInMonth = (year, month) => {
         return new Date(year, month + 1, 0).getDate();
