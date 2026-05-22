@@ -108,8 +108,45 @@ app.get('/api/schedule', async (req, res) => {
         // 묶은 JSON을 프론트엔드로 응답
         res.json(cachedSchedule);
     } catch (error) {
-        console.error("API 요류:", error);
+        console.error("API 오류:", error);
         res.status(500).json({ error: '데이터를 불러오는 중 오류가 발생했습니다.' });
+    }
+});
+
+// 관리자용 퍼지/조회 API 엔드포인트
+app.get('/api/sba-qt', async (req, res) => {
+    try {
+        const purge = req.query.purge === 'true';
+        if (purge) {
+            const authHeader = req.headers['authorization'];
+            const token = authHeader ? authHeader.replace('Bearer ', '') : '';
+            const paramToken = req.query.token;
+            const targetToken = token || paramToken;
+            const ADMIN_PURGE_TOKEN = process.env.ADMIN_PURGE_TOKEN || 'sba_qt_admin_secret_token';
+
+            if (!targetToken || targetToken !== ADMIN_PURGE_TOKEN) {
+                return res.status(401).json({ error: '인증 권한이 없거나 토큰이 유효하지 않습니다.' });
+            }
+
+            cachedSchedule = null;
+            lastFetchTime = 0;
+            console.log("관리자에 의해 구글 시트 캐시가 강제 갱신(Purge)되었습니다.");
+        }
+
+        const now = Date.now();
+        if (!cachedSchedule || (now - lastFetchTime > CACHE_DURATION_MS)) {
+            console.log("구글 시트에서 최신 일정을 동기화합니다...");
+            cachedSchedule = await fetchAndParseSchedule();
+            lastFetchTime = now;
+        }
+
+        res.json({
+            ...cachedSchedule,
+            purged: purge
+        });
+    } catch (error) {
+        console.error("SBA_QT 시트 연동 오류:", error);
+        res.status(500).json({ error: '데이터를 처리하는 중 오류가 발생했습니다.' });
     }
 });
 

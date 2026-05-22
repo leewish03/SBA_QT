@@ -224,11 +224,95 @@ export function TabWeekly({ dailyPlans, currentDate, onCardClick }) {
 }
 
 // ==========================================
-// 2. AdminModal (관리자 모달)
+// 2. AdminModal (관리자 설정 모달)
 // ==========================================
+const AdminSectionTitle = styled.h4`
+  margin: 16px 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--sba-text);
+  border-bottom: 1px solid var(--sba-border-strong);
+  padding-bottom: 4px;
+`;
+
+const AdminReflList = styled.div`
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--sba-card-sub-bg);
+  margin-bottom: 12px;
+`;
+
+const AdminReflItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--sba-border);
+  
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+const DeleteTextButton = styled.button`
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  
+  &:hover {
+    background: rgba(239, 68, 68, 0.1);
+  }
+`;
+
 export function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, addToast }) {
     const [token, setToken] = useState('sba_qt_admin_secret_token');
     const [syncing, setSyncing] = useState(false);
+    const [refls, setRefls] = useState([]);
+    const [stats, setStats] = useState({ bookmarks: 0, notes: 0 });
+
+    const loadRefls = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('qt_shared_reflections')
+                .select('id, author_name, passage, created_at')
+                .order('created_at', { ascending: false })
+                .limit(20);
+            if (!error && data) {
+                setRefls(data);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const loadStats = () => {
+        try {
+            const bm = localStorage.getItem('sba_qt_bookmarks');
+            const nt = localStorage.getItem('sba_qt_notes');
+            setStats({
+                bookmarks: bm ? JSON.parse(bm).length : 0,
+                notes: nt ? Object.keys(JSON.parse(nt)).length : 0
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    useEffect(() => {
+        if (isOpen) {
+            loadRefls();
+            loadStats();
+        }
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -251,14 +335,38 @@ export function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, add
         }
     };
 
+    const handleDeleteRefl = async (id) => {
+        if (!window.confirm('해당 묵상 공유글을 삭제하시겠습니까?')) return;
+        try {
+            const { error } = await supabase
+                .from('qt_shared_reflections')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+            addToast('묵상 공유글이 삭제되었습니다.');
+            loadRefls();
+        } catch (err) {
+            alert('삭제 실패: ' + err.message);
+        }
+    };
+
+    const handleClearLocalCache = () => {
+        if (!window.confirm('로컬 캐시(북마크, 메모)를 모두 초기화하고 화면을 재로드하시겠습니까?')) return;
+        localStorage.removeItem('sba_qt_bookmarks');
+        localStorage.removeItem('sba_qt_notes');
+        localStorage.removeItem('sba_bible_font_size');
+        addToast('로컬 데이터가 완전히 초기화되었습니다.');
+        window.location.reload();
+    };
+
     return (
         <ModalOverlay onClick={onClose}>
-            <ModalContent onClick={e => e.stopPropagation()}>
+            <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '95%' }}>
                 <ModalHeader>
                     <ModalTitle>관리자 설정 (Admin)</ModalTitle>
                     <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
                 </ModalHeader>
-                <p style={{fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 16px'}}>
+                <p style={{fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px'}}>
                     큐티 기준일 변경 및 시트 캐시 초기화
                 </p>
                 
@@ -279,8 +387,28 @@ export function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, add
                         onChange={e => setToken(e.target.value)}
                     />
                 </FormGroup>
+
+                <AdminSectionTitle>지체들의 묵상 공유글 관리</AdminSectionTitle>
+                <AdminReflList>
+                    {refls.length === 0 ? (
+                        <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--sba-text-muted)', padding: '10px 0' }}>공유된 글이 없습니다.</div>
+                    ) : (
+                        refls.map(r => (
+                            <AdminReflItem key={r.id}>
+                                <span>{r.author_name} - {r.passage}</span>
+                                <DeleteTextButton onClick={() => handleDeleteRefl(r.id)}>삭제</DeleteTextButton>
+                            </AdminReflItem>
+                        ))
+                    )}
+                </AdminReflList>
+
+                <AdminSectionTitle>로컬 데이터 진단</AdminSectionTitle>
+                <div style={{ fontSize: '0.8rem', color: 'var(--sba-text-secondary)', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>북마크: {stats.bookmarks}개 | 오늘의 메모: {stats.notes}개</span>
+                    <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 캐시 초기화</DeleteTextButton>
+                </div>
                 
-                <ButtonGroup style={{ flexDirection: 'column', gap: '10px' }}>
+                <ButtonGroup style={{ flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
                     <ShadButton $variant="accent" onClick={handleSync} disabled={syncing}>
                         {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
                     </ShadButton>
@@ -369,9 +497,19 @@ const NoteIndicator = styled.span`
   background-color: ${props => props.$isSelected ? 'var(--sba-bg)' : 'var(--sba-text-secondary)'};
 `;
 
+const isValidDate = (d) => d instanceof Date && !isNaN(d.getTime());
+
 export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
     const [noteDates, setNoteDates] = useState(new Set());
-    const [viewDate, setViewDate] = useState(new Date(currentDate));
+    const [viewDate, setViewDate] = useState(() => {
+        return isValidDate(currentDate) ? new Date(currentDate) : getEffectiveDate();
+    });
+
+    useEffect(() => {
+        if (isOpen && isValidDate(currentDate)) {
+            setViewDate(new Date(currentDate));
+        }
+    }, [isOpen, currentDate]);
 
     if (!isOpen) return null;
 
@@ -392,6 +530,7 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
         return new Date(year, month + 1, 0).getDate();
     };
 
+    const safeCurrentDate = isValidDate(currentDate) ? currentDate : getEffectiveDate();
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
     
@@ -436,7 +575,7 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
                     <CalendarTitleText>{year}년 {month + 1}월</CalendarTitleText>
                     <CalendarNavButton onClick={nextMonth}>▶</CalendarNavButton>
                 </CalendarHeader>
-
+ 
                 <CalendarGrid>
                     {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
                         <WeekdayHeader key={d} $isSunday={i === 0} $isSaturday={i === 6}>{d}</WeekdayHeader>
@@ -446,7 +585,7 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
                         if (!date) return <div key={`empty-${idx}`} />;
                         
                         const dateStr = date.toISOString().split('T')[0];
-                        const isSelected = dateStr === currentDate.toISOString().split('T')[0];
+                        const isSelected = dateStr === safeCurrentDate.toISOString().split('T')[0];
                         const hasNote = noteDates.has(dateStr);
                         
                         return (
@@ -463,7 +602,7 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
                         );
                     })}
                 </CalendarGrid>
-
+ 
                 <ButtonGroup>
                     <ShadButton 
                         $variant="outline"

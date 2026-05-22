@@ -17,12 +17,13 @@ export function TopHeader({ currentDate, onOpenCalendar, isDark, onToggleDark, s
 
     const handleFontSize = (delta) => {
         const root = document.documentElement;
-        let currentSize = parseFloat(getComputedStyle(root).fontSize);
+        let currentSize = parseFloat(root.style.getPropertyValue('--sba-bible-font-size') || '17.6');
+        if (isNaN(currentSize)) currentSize = 17.6;
         let newSize = currentSize + delta;
         if (newSize < 12) newSize = 12;
         if (newSize > 24) newSize = 24;
-        root.style.fontSize = `${newSize}px`;
-        localStorage.setItem('sba_font_size', newSize);
+        root.style.setProperty('--sba-bible-font-size', `${newSize}px`);
+        localStorage.setItem('sba_bible_font_size', newSize);
     };
 
     const handleLogout = async () => {
@@ -33,8 +34,13 @@ export function TopHeader({ currentDate, onOpenCalendar, isDark, onToggleDark, s
     };
 
     useEffect(() => {
-        const saved = localStorage.getItem('sba_font_size');
-        if (saved) document.documentElement.style.fontSize = `${saved}px`;
+        document.documentElement.style.fontSize = '';
+        const saved = localStorage.getItem('sba_bible_font_size');
+        if (saved) {
+            document.documentElement.style.setProperty('--sba-bible-font-size', `${saved}px`);
+        } else {
+            document.documentElement.style.setProperty('--sba-bible-font-size', '17.6px');
+        }
     }, []);
 
     return (

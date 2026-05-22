@@ -344,10 +344,55 @@ function NoteEditor({ targetDate, session, passage, verses }) {
 // ==========================================
 // 2. 말씀 구절 하이라이트 / 북마크 팝업 매니저 헬퍼
 // ==========================================
+const FloatingBar = styled.div`
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 500px;
+  background: var(--sba-modal-bg);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 12px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 95;
+  gap: 12px;
+`;
+
+const FloatingInfo = styled.span`
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--sba-text);
+`;
+
+const FloatingBtnGroup = styled.div`
+  display: flex;
+  gap: 6px;
+`;
+
+const FloatingBtn = styled.button`
+  background: ${props => props.$variant === 'accent' ? 'var(--sba-text)' : 'transparent'};
+  color: ${props => props.$variant === 'accent' ? 'var(--sba-bg)' : 'var(--sba-text)'};
+  border: 1px solid ${props => props.$variant === 'accent' ? 'var(--sba-text)' : 'var(--sba-border-strong)'};
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: ${props => props.$variant === 'accent' ? 'var(--sba-text-secondary)' : 'var(--sba-card-sub-bg)'};
+  }
+`;
+
 function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBookmarkChange }) {
-  const [selectedVerse, setSelectedVerse] = useState(null); // { vNum, text }
+  const [selectedVerses, setSelectedVerses] = useState({}); // { [vNum]: text }
   const [bookmarks, setBookmarks] = useState([]);
-  const tooltipRef = useRef(null);
 
   // 로컬/클라우드 북마크 리스트 로드
   const loadBookmarks = () => {
@@ -371,22 +416,35 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
   }, []);
 
   const isBookmarked = (vNum) => {
-    return bookmarks.some(b => b.book === book && b.chapter === parseInt(chapter) && b.verse === parseInt(vNum));
+    return bookmarks.some(b => {
+      if (b.book !== book || b.chapter !== parseInt(chapter)) return false;
+      if (b.verses) {
+        const list = b.verses.split(',').map(Number);
+        return list.includes(parseInt(vNum));
+      }
+      return b.verse === parseInt(vNum);
+    });
   };
 
   const handleVerseClick = (vNum, text) => {
-    if (selectedVerse && selectedVerse.vNum === vNum) {
-      setSelectedVerse(null);
-    } else {
-      setSelectedVerse({ vNum, text });
-    }
+    setSelectedVerses(prev => {
+      const next = { ...prev };
+      if (next[vNum]) {
+        delete next[vNum];
+      } else {
+        next[vNum] = text;
+      }
+      return next;
+    });
   };
 
   const toggleBookmark = async () => {
-    if (!selectedVerse) return;
-    const vNum = parseInt(selectedVerse.vNum);
-    const chNum = parseInt(chapter);
-    const targetText = selectedVerse.text;
+    const vNums = Object.keys(selectedVerses).map(Number).sort((a, b) => a - b);
+    if (vNums.length === 0) return;
+
+    const minVerse = vNums[0];
+    const versesStr = vNums.join(',');
+    const now = new Date().toISOString();
 
     let localBookmarks = [];
     try {
@@ -394,80 +452,75 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
       if (raw) localBookmarks = JSON.parse(raw);
     } catch (e) {}
 
-    const index = localBookmarks.findIndex(b => b.book === book && b.chapter === chNum && b.verse === vNum);
-    const now = new Date().toISOString();
+    // 중복 제거 및 기존 동일 구조 유무 체크
+    const exists = localBookmarks.some(b => b.book === book && b.chapter === parseInt(chapter) && b.verses === versesStr);
+    if (exists) {
+      addToast('이미 북마크에 등록된 구절 조합입니다.');
+      setSelectedVerses({});
+      return;
+    }
 
-    if (index > -1) {
-      // 북마크 삭제
-      localBookmarks.splice(index, 1);
-      localStorage.setItem('sba_qt_bookmarks', JSON.stringify(localBookmarks));
-      setBookmarks(localBookmarks);
-      addToast('북마크가 해제되었습니다.');
+    const newBookmark = {
+      book,
+      chapter: parseInt(chapter),
+      verse: minVerse,
+      verses: versesStr,
+      memo: '',
+      created_at: now
+    };
 
-      if (session) {
-        await supabase
-          .from('qt_bookmarks')
-          .delete()
-          .eq('user_id', session.user.id)
-          .eq('book', book)
-          .eq('chapter', chNum)
-          .eq('verse', vNum);
-      }
-    } else {
-      // 북마크 등록
-      const newBookmark = {
-        book,
-        chapter: chNum,
-        verse: vNum,
-        created_at: now
-      };
-      localBookmarks.push(newBookmark);
-      localStorage.setItem('sba_qt_bookmarks', JSON.stringify(localBookmarks));
-      setBookmarks(localBookmarks);
-      addToast('구절이 북마크에 저장되었습니다.');
+    localBookmarks.push(newBookmark);
+    localStorage.setItem('sba_qt_bookmarks', JSON.stringify(localBookmarks));
+    setBookmarks(localBookmarks);
+    addToast(`${vNums.length}개 구절이 북마크에 저장되었습니다.`);
 
-      if (session) {
+    if (session) {
+      try {
         await supabase
           .from('qt_bookmarks')
           .insert({
             user_id: session.user.id,
             book,
-            chapter: chNum,
-            verse: vNum,
+            chapter: parseInt(chapter),
+            verse: minVerse,
+            verses: versesStr,
+            memo: '',
             created_at: now
           });
+      } catch (err) {
+        console.error(err);
       }
     }
 
     if (onBookmarkChange) onBookmarkChange();
-    setSelectedVerse(null);
+    setSelectedVerses({});
   };
 
   const copyToClipboard = () => {
-    if (!selectedVerse) return;
+    const vNums = Object.keys(selectedVerses).map(Number).sort((a, b) => a - b);
+    if (vNums.length === 0) return;
+
     const fullName = SHORT_TO_FULL[book] || book;
-    const textToCopy = `[${fullName} ${chapter}:${selectedVerse.vNum}] ${selectedVerse.text}`;
+    let rangeStr = `${vNums[0]}`;
+    if (vNums.length > 1) {
+      rangeStr = `${vNums[0]}~${vNums[vNums.length - 1]}`;
+    }
+
+    const sortedTexts = vNums.map(v => `${v}절 ${selectedVerses[v]}`).join('\n');
+    const textToCopy = `[${fullName} ${chapter}:${rangeStr}]\n${sortedTexts}`;
+
     navigator.clipboard.writeText(textToCopy)
       .then(() => {
-        addToast('구절이 클립보드에 복사되었습니다.');
+        addToast('선택한 구절이 복사되었습니다.');
       })
       .catch(err => {
         console.error('클립보드 복사 실패:', err);
       });
-    setSelectedVerse(null);
+    setSelectedVerses({});
   };
 
-  useEffect(() => {
-    const handleOutsideClick = (e) => {
-      if (tooltipRef.current && !tooltipRef.current.contains(e.target) && !e.target.closest('.sba-verse-block')) {
-        setSelectedVerse(null);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
-
   const fullName = SHORT_TO_FULL[book] || book;
+  const selectedCount = Object.keys(selectedVerses).length;
 
   return (
     <>
@@ -475,7 +528,7 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
       <div className="serif-text sba-verse-container">
         {Object.entries(verses).map(([vNum, text]) => {
           const bookmarked = isBookmarked(vNum);
-          const isFocused = selectedVerse && selectedVerse.vNum === vNum;
+          const isFocused = !!selectedVerses[vNum];
           const elementId = `verse-${book}-${chapter}-${vNum}`;
 
           return (
@@ -492,17 +545,15 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
         })}
       </div>
 
-      {selectedVerse && (
-        <div className="sba-tooltip-menu" ref={tooltipRef}>
-          <button className="sba-tooltip-btn" onClick={toggleBookmark}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill={isBookmarked(selectedVerse.vNum) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
-            {isBookmarked(selectedVerse.vNum) ? '북마크 해제' : '북마크 저장'}
-          </button>
-          <button className="sba-tooltip-btn" onClick={copyToClipboard}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-            복사하기
-          </button>
-        </div>
+      {selectedCount > 0 && (
+        <FloatingBar>
+          <FloatingInfo>{selectedCount}개 구절 선택됨</FloatingInfo>
+          <FloatingBtnGroup>
+            <FloatingBtn onClick={copyToClipboard}>복사</FloatingBtn>
+            <FloatingBtn $variant="accent" onClick={toggleBookmark}>북마크 추가</FloatingBtn>
+            <FloatingBtn onClick={() => setSelectedVerses({})}>해제</FloatingBtn>
+          </FloatingBtnGroup>
+        </FloatingBar>
       )}
     </>
   );
@@ -684,11 +735,159 @@ export function TabReading({ todayPlan, session, addToast, onBookmarkChange }) {
 }
 
 // ==========================================
-// 5. TabBookmarks (북마크 리스트 탭 - 신설)
+// 5. TabBookmarks (북마크 리스트 탭)
 // ==========================================
-export function TabBookmarks({ onNavigateToVerse, updateTrigger }) {
+const DetailModalOverlay = styled.div`
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const DetailModalContent = styled.div`
+  background: var(--sba-modal-bg);
+  color: var(--sba-text);
+  padding: 24px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--sba-border-strong);
+  position: relative;
+`;
+
+const DetailVerseContainer = styled.div`
+  max-height: 180px;
+  overflow-y: auto;
+  margin: 12px 0 16px;
+  padding: 12px;
+  background: var(--sba-card-sub-bg);
+  border-radius: 8px;
+  border: 1px solid var(--sba-border-strong);
+  text-align: left;
+`;
+
+const DetailVerseLine = styled.div`
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--sba-text);
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const DetailVerseNum = styled.span`
+  font-weight: 600;
+  color: var(--sba-text-secondary);
+  margin-right: 6px;
+`;
+
+const BookmarkSearchWrapper = styled.div`
+  margin-bottom: 16px;
+  width: 100%;
+`;
+
+function BookmarkDetailModal({ bookmark, onClose, onSaveMemo, onDelete, onGoToVerse, addToast }) {
+  const [memoText, setMemoText] = useState(bookmark.memo || '');
+
+  const handleImportTodayMemo = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    try {
+      const raw = localStorage.getItem('sba_qt_notes');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed[todayStr] && parsed[todayStr].content) {
+          setMemoText(parsed[todayStr].content);
+          addToast('오늘의 묵상 노트를 성공적으로 불러왔습니다.');
+          return;
+        }
+      }
+      addToast('오늘 기록된 묵상 메모가 없습니다.');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fullName = SHORT_TO_FULL[bookmark.book] || bookmark.book;
+  let rangeStr = `${bookmark.verse}`;
+  if (bookmark.verses && bookmark.verses.includes(',')) {
+    const list = bookmark.verses.split(',');
+    rangeStr = `${list[0]}~${list[list.length - 1]}`;
+  }
+
+  return (
+    <DetailModalOverlay onClick={onClose}>
+      <DetailModalContent onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--sba-border)', paddingBottom: '12px' }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '700' }}>
+            {fullName} {bookmark.chapter}장 {rangeStr}절 북마크
+          </h3>
+          <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--sba-text-muted)' }} onClick={onClose}>✕</button>
+        </div>
+
+        <DetailVerseContainer className="serif-text">
+          {bookmark.verseTextList && bookmark.verseTextList.map(item => (
+            <DetailVerseLine key={item.vNum}>
+              <DetailVerseNum>{item.vNum}</DetailVerseNum>
+              {item.text}
+            </DetailVerseLine>
+          ))}
+        </DetailVerseContainer>
+
+        <div style={{ textAlign: 'left', marginBottom: '16px' }}>
+          <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', fontWeight: '600', color: 'var(--sba-text-secondary)', marginBottom: '6px' }}>
+            <span>북마크 메모</span>
+            <button 
+              style={{ background: 'none', border: 'none', color: 'var(--sba-text)', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.75rem' }}
+              onClick={handleImportTodayMemo}
+            >
+              오늘의 메모에서 불러오기
+            </button>
+          </label>
+          <textarea
+            style={{ width: '100%', minHeight: '80px', padding: '10px', background: 'var(--sba-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border-strong)', borderRadius: '6px', fontSize: '0.85rem', resize: 'none', outline: 'none' }}
+            placeholder="이 말씀에 관한 개인적인 묵상이나 감동을 메모해 보세요..."
+            value={memoText}
+            onChange={e => setMemoText(e.target.value)}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button 
+            style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', border: '1px solid var(--sba-border-strong)', background: 'transparent', color: 'var(--sba-text)', fontWeight: '600', fontSize: '0.85rem' }}
+            onClick={() => onGoToVerse(bookmark.book, bookmark.chapter, bookmark.verse)}
+          >
+            본문으로 이동
+          </button>
+          <button 
+            style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', border: 'none', background: 'var(--sba-text)', color: 'var(--sba-bg)', fontWeight: '600', fontSize: '0.85rem' }}
+            onClick={() => onSaveMemo(memoText)}
+          >
+            저장
+          </button>
+          <button 
+            style={{ padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontWeight: '600', fontSize: '0.85rem' }}
+            onClick={onDelete}
+          >
+            삭제
+          </button>
+        </div>
+      </DetailModalContent>
+    </DetailModalOverlay>
+  );
+}
+
+export function TabBookmarks({ onNavigateToVerse, updateTrigger, addToast }) {
   const [bookmarks, setBookmarks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedBookmark, setSelectedBookmark] = useState(null);
 
   const loadBookmarks = async () => {
     setLoading(true);
@@ -700,15 +899,29 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger }) {
       console.error(e);
     }
 
-    // 각각의 북마크 말씀 구절 구글/IndexedDB 로딩 후 간략 텍스트 스니펫 생성
     const bookmarkedDetails = [];
     for (const b of localBookmarks) {
       try {
         const bookData = await bibleStorage.getBook(b.book);
-        if (bookData && bookData[b.chapter] && bookData[b.chapter][b.verse]) {
+        if (bookData && bookData[b.chapter]) {
+          let text = '';
+          let verseTextList = [];
+          if (b.verses) {
+            const list = b.verses.split(',').map(Number);
+            list.forEach(vNum => {
+              if (bookData[b.chapter][vNum]) {
+                verseTextList.push({ vNum, text: bookData[b.chapter][vNum] });
+              }
+            });
+            text = verseTextList.map(item => `${item.vNum}절: ${item.text}`).join(' ');
+          } else {
+            text = bookData[b.chapter][b.verse] || '';
+            verseTextList.push({ vNum: b.verse, text });
+          }
           bookmarkedDetails.push({
             ...b,
-            text: bookData[b.chapter][b.verse]
+            text,
+            verseTextList
           });
         }
       } catch (err) {
@@ -716,7 +929,6 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger }) {
       }
     }
     
-    // 최근에 등록된 순으로 정렬
     bookmarkedDetails.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
     setBookmarks(bookmarkedDetails);
     setLoading(false);
@@ -726,19 +938,26 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger }) {
     loadBookmarks();
   }, [updateTrigger]);
 
-  const handleDelete = async (e, b) => {
-    e.stopPropagation();
+  const handleDelete = async (b) => {
+    if (!window.confirm('정말 북마크를 삭제하시겠습니까?')) return;
     let localBookmarks = [];
     try {
       const raw = localStorage.getItem('sba_qt_bookmarks');
       if (raw) localBookmarks = JSON.parse(raw);
     } catch (err) {}
 
-    const index = localBookmarks.findIndex(item => item.book === b.book && item.chapter === b.chapter && item.verse === b.verse);
+    const index = localBookmarks.findIndex(item => 
+      item.book === b.book && 
+      item.chapter === b.chapter && 
+      (item.verses === b.verses || item.verse === b.verse)
+    );
+
     if (index > -1) {
       localBookmarks.splice(index, 1);
       localStorage.setItem('sba_qt_bookmarks', JSON.stringify(localBookmarks));
       loadBookmarks();
+      setSelectedBookmark(null);
+      if (addToast) addToast('북마크가 삭제되었습니다.');
 
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
@@ -748,37 +967,123 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger }) {
           .eq('user_id', session.user.id)
           .eq('book', b.book)
           .eq('chapter', b.chapter)
-          .eq('verse', b.verse);
+          .eq('verse', b.verse)
+          .eq('verses', b.verses || null);
       }
     }
   };
 
+  const handleSaveMemo = async (newMemo) => {
+    if (!selectedBookmark) return;
+    let localBookmarks = [];
+    try {
+      const raw = localStorage.getItem('sba_qt_bookmarks');
+      if (raw) localBookmarks = JSON.parse(raw);
+    } catch (err) {}
+
+    const index = localBookmarks.findIndex(item => 
+      item.book === selectedBookmark.book && 
+      item.chapter === selectedBookmark.chapter && 
+      (item.verses === selectedBookmark.verses || item.verse === selectedBookmark.verse)
+    );
+
+    if (index > -1) {
+      localBookmarks[index].memo = newMemo;
+      localStorage.setItem('sba_qt_bookmarks', JSON.stringify(localBookmarks));
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await supabase
+          .from('qt_bookmarks')
+          .update({ memo: newMemo })
+          .eq('user_id', session.user.id)
+          .eq('book', selectedBookmark.book)
+          .eq('chapter', selectedBookmark.chapter)
+          .eq('verse', selectedBookmark.verse)
+          .eq('verses', selectedBookmark.verses || null);
+      }
+      if (addToast) addToast('메모가 저장되었습니다.');
+      loadBookmarks();
+      setSelectedBookmark(null);
+    }
+  };
+
+  const filteredBookmarks = bookmarks.filter(b => {
+    const fullName = SHORT_TO_FULL[b.book] || b.book;
+    const nameStr = `${fullName} ${b.chapter}장 ${b.verses || b.verse}`;
+    const q = searchQuery.toLowerCase();
+    return (
+      nameStr.toLowerCase().includes(q) ||
+      b.text.toLowerCase().includes(q) ||
+      (b.memo && b.memo.toLowerCase().includes(q))
+    );
+  });
+
   if (loading) return <div className="sba-loading">북마크 리스트를 로드 중...</div>;
-  if (bookmarks.length === 0) return <div className="sba-empty-state">저장된 북마크가 없습니다. 말씀 본문에서 구절을 터치하여 북마크로 추가해 보세요.</div>;
 
   return (
     <div className="sba-tab-content">
       <h2 className="sba-verse-title" style={{ borderLeft: 'none', marginBottom: '16px' }}>내 북마크</h2>
-      <div className="sba-bookmark-list">
-        {bookmarks.map((b, idx) => {
-          const fullName = SHORT_TO_FULL[b.book] || b.book;
-          return (
-            <div 
-              key={`${b.book}-${b.chapter}-${b.verse}-${idx}`}
-              className="sba-bookmark-item"
-              onClick={() => onNavigateToVerse(b.book, b.chapter, b.verse)}
-            >
-              <div className="sba-bookmark-info">
-                <span className="sba-bookmark-name">{fullName} {b.chapter}장 {b.verse}절</span>
-                <span className="sba-bookmark-snippet">{b.text}</span>
+      
+      <BookmarkSearchWrapper>
+        <StyledInput 
+          type="text" 
+          placeholder="성경 구절명, 말씀 텍스트, 메모 검색..." 
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
+      </BookmarkSearchWrapper>
+
+      {filteredBookmarks.length === 0 ? (
+        <div className="sba-empty-state">
+          {searchQuery ? '검색 결과가 없습니다.' : '저장된 북마크가 없습니다. 말씀 본문에서 구절을 터치하여 북마크로 추가해 보세요.'}
+        </div>
+      ) : (
+        <div className="sba-bookmark-list">
+          {filteredBookmarks.map((b, idx) => {
+            const fullName = SHORT_TO_FULL[b.book] || b.book;
+            let rangeStr = `${b.verse}`;
+            if (b.verses && b.verses.includes(',')) {
+              const list = b.verses.split(',');
+              rangeStr = `${list[0]}~${list[list.length - 1]}`;
+            }
+
+            return (
+              <div 
+                key={`${b.book}-${b.chapter}-${b.verse}-${idx}`}
+                className="sba-bookmark-item"
+                onClick={() => setSelectedBookmark(b)}
+              >
+                <div className="sba-bookmark-info">
+                  <span className="sba-bookmark-name">{fullName} {b.chapter}장 {rangeStr}절</span>
+                  <span className="sba-bookmark-snippet">{b.text}</span>
+                  {b.memo && <span className="sba-bookmark-snippet" style={{ color: 'var(--sba-text-secondary)', fontStyle: 'italic', marginTop: '4px', borderLeft: '2px solid var(--sba-border-strong)', paddingLeft: '6px' }}>📝 {b.memo}</span>}
+                </div>
+                <button 
+                  className="sba-bookmark-delete-btn" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(b);
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                </button>
               </div>
-              <button className="sba-bookmark-delete-btn" onClick={(e) => handleDelete(e, b)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-              </button>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
+
+      {selectedBookmark && (
+        <BookmarkDetailModal
+          bookmark={selectedBookmark}
+          onClose={() => setSelectedBookmark(null)}
+          onSaveMemo={handleSaveMemo}
+          onDelete={() => handleDelete(selectedBookmark)}
+          onGoToVerse={onNavigateToVerse}
+          addToast={addToast}
+        />
+      )}
     </div>
   );
 }
@@ -1005,6 +1310,118 @@ const CommentContent = styled.div`
   line-height: 1.45;
 `;
 
+// 북마크에서 구절 및 메모를 선택하는 모달 컴포넌트
+function BookmarkSelectModal({ isOpen, onClose, onSelect, addToast }) {
+  const [bookmarks, setBookmarks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const load = async () => {
+      setLoading(true);
+      let localBookmarks = [];
+      try {
+        const raw = localStorage.getItem('sba_qt_bookmarks');
+        if (raw) localBookmarks = JSON.parse(raw);
+      } catch (e) {
+        console.error(e);
+      }
+
+      const bookmarkedDetails = [];
+      for (const b of localBookmarks) {
+        try {
+          const bookData = await bibleStorage.getBook(b.book);
+          if (bookData && bookData[b.chapter]) {
+            let text = '';
+            if (b.verses) {
+              const list = b.verses.split(',').map(Number);
+              const verseTextList = [];
+              list.forEach(vNum => {
+                if (bookData[b.chapter][vNum]) {
+                  verseTextList.push(`${vNum}절: ${bookData[b.chapter][vNum]}`);
+                }
+              });
+              text = verseTextList.join(' ');
+            } else {
+              text = bookData[b.chapter][b.verse] || '';
+            }
+            bookmarkedDetails.push({
+              ...b,
+              text
+            });
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      bookmarkedDetails.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      setBookmarks(bookmarkedDetails);
+      setLoading(false);
+    };
+    load();
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <DetailModalOverlay onClick={onClose}>
+      <DetailModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--sba-border)', paddingBottom: '12px', marginBottom: '16px' }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '700' }}>북마크에서 선택</h3>
+          <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--sba-text-muted)' }} onClick={onClose}>✕</button>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--sba-text-secondary)', fontSize: '0.9rem' }}>북마크 로드 중...</div>
+        ) : bookmarks.length === 0 ? (
+          <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--sba-text-secondary)', fontSize: '0.9rem' }}>저장된 북마크가 없습니다.</div>
+        ) : (
+          <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {bookmarks.map((b, idx) => {
+              const fullName = SHORT_TO_FULL[b.book] || b.book;
+              let rangeStr = `${b.verse}`;
+              if (b.verses && b.verses.includes(',')) {
+                const list = b.verses.split(',');
+                rangeStr = `${list[0]}~${list[list.length - 1]}`;
+              }
+              const passageName = `${fullName} ${b.chapter}:${rangeStr}`;
+
+              return (
+                <div
+                  key={idx}
+                  onClick={() => onSelect(b, passageName)}
+                  style={{
+                    padding: '12px',
+                    border: '1px solid var(--sba-border-strong)',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    background: 'var(--sba-card-bg)',
+                    textAlign: 'left',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ fontWeight: '600', fontSize: '0.85rem', color: 'var(--sba-text)', marginBottom: '4px' }}>
+                    {passageName}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--sba-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {b.text}
+                  </div>
+                  {b.memo && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--sba-text-muted)', marginTop: '4px', fontStyle: 'italic' }}>
+                      📝 {b.memo}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </DetailModalContent>
+    </DetailModalOverlay>
+  );
+}
+
 export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const [reflections, setReflections] = useState([]);
   const [comments, setComments] = useState({}); // { reflectionId: [] }
@@ -1015,6 +1432,7 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const [submitting, setSubmitting] = useState(false);
   const [activeCommentId, setActiveCommentId] = useState(null); // 댓글창 열린 글 ID
   const [newCommentText, setNewCommentText] = useState({}); // { reflectionId: '' }
+  const [isBookmarkSelectOpen, setIsBookmarkSelectOpen] = useState(false);
 
   const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
 
@@ -1110,6 +1528,17 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleSelectBookmark = (bookmark, passageName) => {
+    setPassage(passageName);
+    if (bookmark.memo) {
+      setContent(bookmark.memo);
+    } else {
+      setContent('');
+    }
+    setIsBookmarkSelectOpen(false);
+    addToast(`${passageName} 및 북마크 메모를 불러왔습니다.`);
   };
 
   const handleSubmitReflection = async (e) => {
@@ -1275,13 +1704,20 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
           </GuestNotice>
         ) : (
           <form onSubmit={handleSubmitReflection} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <StyledInput 
                 type="text" 
                 placeholder="예: 마태복음 1:1"
                 value={passage}
                 onChange={e => setPassage(e.target.value)}
+                style={{ flex: 1, minWidth: '120px' }}
               />
+              <OutlinedButton 
+                type="button" 
+                onClick={() => setIsBookmarkSelectOpen(true)}
+              >
+                🔖 북마크에서 선택
+              </OutlinedButton>
               <OutlinedButton 
                 type="button" 
                 onClick={handleImportMemo}
@@ -1306,6 +1742,13 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
           </form>
         )}
       </SharingCard>
+
+      <BookmarkSelectModal
+        isOpen={isBookmarkSelectOpen}
+        onClose={() => setIsBookmarkSelectOpen(false)}
+        onSelect={handleSelectBookmark}
+        addToast={addToast}
+      />
 
       <h2 className="sba-verse-title" style={{ borderLeft: 'none', margin: '24px 0 16px 0' }}>지체들의 나눔</h2>
 

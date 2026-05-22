@@ -30,7 +30,7 @@ function chunkArray(array, size) {
 }
 
 async function syncBookmarks(userId) {
-  // 로컬 북마크 로드 (예: [{ book, chapter, verse, created_at }])
+  // 로컬 북마크 로드 (예: [{ book, chapter, verse, verses, memo, created_at }])
   let localBookmarks = [];
   try {
     const raw = localStorage.getItem('sba_qt_bookmarks');
@@ -42,41 +42,59 @@ async function syncBookmarks(userId) {
   // 클라우드 북마크 로드
   const { data: cloudBookmarks, error } = await supabase
     .from('qt_bookmarks')
-    .select('book, chapter, verse, created_at')
+    .select('book, chapter, verse, verses, memo, created_at')
     .eq('user_id', userId);
 
   if (error) throw error;
 
-  const cloudSet = new Set(cloudBookmarks.map(b => `${b.book}-${b.chapter}-${b.verse}`));
+  const makeKey = (b) => `${b.book}-${b.chapter}-${b.verses || b.verse}`;
+  const cloudSet = new Set(cloudBookmarks.map(makeKey));
 
   // 로컬에서 클라우드에 없는 것 추출
   const toUpload = [];
   localBookmarks.forEach(local => {
-    const key = `${local.book}-${local.chapter}-${local.verse}`;
+    const key = makeKey(local);
     if (!cloudSet.has(key)) {
       toUpload.push({
         user_id: userId,
         book: local.book,
         chapter: local.chapter,
         verse: local.verse,
+        verses: local.verses || null,
+        memo: local.memo || null,
         created_at: local.created_at || new Date().toISOString()
       });
     }
   });
 
   // 클라우드 데이터를 로컬에 없는 것 병합하기 위해 로컬 Set 구성
-  const localSet = new Set(localBookmarks.map(b => `${b.book}-${b.chapter}-${b.verse}`));
+  const localSet = new Set(localBookmarks.map(makeKey));
   const mergedBookmarks = [...localBookmarks];
 
   cloudBookmarks.forEach(cloud => {
-    const key = `${cloud.book}-${cloud.chapter}-${cloud.verse}`;
+    const key = makeKey(cloud);
     if (!localSet.has(key)) {
       mergedBookmarks.push({
         book: cloud.book,
         chapter: cloud.chapter,
         verse: cloud.verse,
+        verses: cloud.verses || null,
+        memo: cloud.memo || null,
         created_at: cloud.created_at
       });
+    } else {
+      // 로컬에 이미 동일한 북마크가 있지만 메모가 다르면 병합
+      const localIdx = mergedBookmarks.findIndex(b => makeKey(b) === key);
+      if (localIdx !== -1) {
+        const localItem = mergedBookmarks[localIdx];
+        if (cloud.memo && cloud.memo.trim() !== '' && (!localItem.memo || localItem.memo.trim() === '')) {
+          mergedBookmarks[localIdx].memo = cloud.memo;
+        } else if (cloud.memo && localItem.memo && cloud.memo !== localItem.memo) {
+          if (!localItem.memo.includes(cloud.memo)) {
+            mergedBookmarks[localIdx].memo = `${localItem.memo}\n---\n${cloud.memo}`;
+          }
+        }
+      }
     }
   });
 

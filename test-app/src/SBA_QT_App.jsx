@@ -152,7 +152,17 @@ export default function SBA_QT_App() {
         };
     }, []);
 
-    const targetKST = getMidnightKST(currentDate);
+    const effectiveDate = useMemo(() => {
+        if (currentDate instanceof Date && !isNaN(currentDate.getTime())) {
+            return currentDate;
+        }
+        return getEffectiveDate();
+    }, [currentDate]);
+
+    const targetKST = useMemo(() => {
+        return getMidnightKST(effectiveDate);
+    }, [effectiveDate]);
+
     const weekDayIdx = targetKST.getUTCDay();
 
     // 주간 7일간의 일정 계산 (O(1))
@@ -161,7 +171,12 @@ export default function SBA_QT_App() {
         
         const diffToMonday = weekDayIdx === 0 ? -6 : 1 - weekDayIdx;
         const plans = {};
-        const startKST = getMidnightKST(new Date(startDateStr));
+        const parsedStartDate = new Date(startDateStr);
+        const startKST = getMidnightKST(
+            parsedStartDate instanceof Date && !isNaN(parsedStartDate.getTime()) 
+                ? parsedStartDate 
+                : new Date(DEFAULT_START_DATE)
+        );
 
         for (let i = 0; i < 7; i++) {
             const d = new Date(targetKST.getTime());
@@ -217,12 +232,16 @@ export default function SBA_QT_App() {
     };
 
     const handleWeekCardClick = (dateObj) => {
-        setCurrentDate(dateObj);
-        setActiveTab('today');
+        if (dateObj instanceof Date && !isNaN(dateObj.getTime())) {
+            setCurrentDate(dateObj);
+            setActiveTab('today');
+        }
     };
 
     const handleSetDate = (newDate) => {
-        setCurrentDate(newDate);
+        if (newDate instanceof Date && !isNaN(newDate.getTime())) {
+            setCurrentDate(newDate);
+        }
         setShowCalendar(false);
     };
 
@@ -233,25 +252,34 @@ export default function SBA_QT_App() {
         let found = false;
 
         if (scheduleData) {
-            // 1. 묵상(QT) 계획에서 검색
-            const startKST = getMidnightKST(new Date(startDateStr));
-            let count = 0;
-            for (const row of scheduleData.qt_plan) {
-                const sp = parseInt(row.start_paragraph);
-                const ep = parseInt(row.end_paragraph);
-                const paras = ep - sp + 1;
-                const rowBook = FULL_TO_SHORT[row.chapter] || row.chapter;
-                
-                if (rowBook === book && sp <= chapter && chapter <= ep) {
-                    const daysElapsed = count + (chapter - sp) + 1;
-                    const d = new Date(startKST.getTime());
-                    d.setUTCDate(startKST.getUTCDate() + daysElapsed);
-                    targetDateObj = d;
-                    targetTab = 'today';
-                    found = true;
-                    break;
+            const parsedStartDate = new Date(startDateStr);
+            const startKST = getMidnightKST(
+                parsedStartDate instanceof Date && !isNaN(parsedStartDate.getTime()) 
+                    ? parsedStartDate 
+                    : new Date(DEFAULT_START_DATE)
+            );
+            
+            if (startKST instanceof Date && !isNaN(startKST.getTime())) {
+                let count = 0;
+                for (const row of scheduleData.qt_plan) {
+                    const sp = parseInt(row.start_paragraph);
+                    const ep = parseInt(row.end_paragraph);
+                    const paras = ep - sp + 1;
+                    const rowBook = FULL_TO_SHORT[row.chapter] || row.chapter;
+                    
+                    if (rowBook === book && sp <= chapter && chapter <= ep) {
+                        const daysElapsed = count + (chapter - sp) + 1;
+                        const d = new Date(startKST.getTime());
+                        d.setUTCDate(startKST.getUTCDate() + daysElapsed);
+                        if (d instanceof Date && !isNaN(d.getTime())) {
+                            targetDateObj = d;
+                            targetTab = 'today';
+                            found = true;
+                        }
+                        break;
+                    }
+                    count += paras;
                 }
-                count += paras;
             }
 
             // 2. 통독 계획에서 검색 (묵상에서 발견되지 않은 경우)
@@ -262,9 +290,11 @@ export default function SBA_QT_App() {
                         const d = getMidnightKST(new Date());
                         d.setUTCMonth(parseInt(row.month) - 1);
                         d.setUTCDate(parseInt(row.day));
-                        targetDateObj = d;
-                        targetTab = 'reading';
-                        found = true;
+                        if (d instanceof Date && !isNaN(d.getTime())) {
+                            targetDateObj = d;
+                            targetTab = 'reading';
+                            found = true;
+                        }
                         break;
                     }
                 }
@@ -272,8 +302,10 @@ export default function SBA_QT_App() {
         }
 
         // 해당 일정 날짜와 탭으로 강제 전환
-        setCurrentDate(targetDateObj);
-        setActiveTab(targetTab);
+        if (targetDateObj instanceof Date && !isNaN(targetDateObj.getTime())) {
+            setCurrentDate(targetDateObj);
+            setActiveTab(targetTab);
+        }
 
         // Lazy Loading 통독/묵상 말씀 렌더링 후 DOM 탐색을 위해 600ms 딜레이
         setTimeout(() => {
@@ -335,13 +367,14 @@ export default function SBA_QT_App() {
                     <TabBookmarks 
                         onNavigateToVerse={handleNavigateToVerse} 
                         updateTrigger={bookmarkTrigger}
+                        addToast={addToast}
                     />
                 );
             case 'weekly':
                 return (
                     <TabWeekly 
                         dailyPlans={dailyPlans} 
-                        currentDate={currentDate} 
+                        currentDate={effectiveDate} 
                         onCardClick={handleWeekCardClick} 
                     />
                 );
@@ -369,7 +402,6 @@ export default function SBA_QT_App() {
             {isSplashVisible && (
                 <div className={`sba-splash-screen ${isSplashFading ? 'fade-out' : ''}`}>
                     <div className="sba-splash-content">
-                        <div className="sba-splash-logo">⛪</div>
                         <h1 className="sba-splash-main-title">서울북부교회</h1>
                         <h2 className="sba-splash-sub-title">QT & 통독</h2>
                         <p className="sba-splash-desc">말씀으로 하루를 여는 은혜의 시간</p>
@@ -381,7 +413,7 @@ export default function SBA_QT_App() {
             )}
 
             <TopHeader 
-                currentDate={currentDate} 
+                currentDate={effectiveDate} 
                 onOpenCalendar={() => setShowCalendar(true)} 
                 isDark={isDark}
                 onToggleDark={() => setIsDark(prev => !prev)}
@@ -400,7 +432,7 @@ export default function SBA_QT_App() {
             <CalendarModal 
                 isOpen={showCalendar} 
                 onClose={() => setShowCalendar(false)} 
-                currentDate={currentDate} 
+                currentDate={effectiveDate} 
                 onSetDate={handleSetDate} 
             />
             

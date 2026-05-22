@@ -162,7 +162,7 @@
     border-radius: 8px;
     line-height: 1.85;
     color: var(--sba-verse-text);
-    font-size: 1.1rem;
+    font-size: var(--sba-bible-font-size, 1.1rem);
     text-align: left; 
     word-break: break-all;
     display: flex;
