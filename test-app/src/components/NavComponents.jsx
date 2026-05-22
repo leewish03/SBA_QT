@@ -89,7 +89,7 @@ export function BottomNav({ activeTab, setActiveTab }) {
     const tabs = [
         { id: 'today', icon: ICONS.today, label: '묵상' },
         { id: 'reading', icon: ICONS.reading, label: '통독' },
-        { id: 'bookmarks', icon: ICONS.bookmarks, label: '북마크' },
+        { id: 'bookmarks', icon: ICONS.bookmarks, label: '기록' },
         { id: 'weekly', icon: ICONS.weekly, label: '주간' },
         { id: 'sharing', icon: ICONS.sharing, label: '나눔' },
     ];

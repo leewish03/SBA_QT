@@ -377,6 +377,8 @@ export default function SBA_QT_App() {
                         onNavigateToVerse={handleNavigateToVerse} 
                         updateTrigger={bookmarkTrigger}
                         addToast={addToast}
+                        session={session}
+                        onOpenAuthModal={() => setShowAuth(true)}
                     />
                 );
             case 'weekly':
