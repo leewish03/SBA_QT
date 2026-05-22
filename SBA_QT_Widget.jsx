@@ -751,9 +751,62 @@ const SHORT_TO_FULL = Object.fromEntries(
 const DAYS_ARR = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
 
 function getMidnightKST(dateObj) {
-    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' });
-    const [year, month, day] = formatter.format(dateObj).split('-');
-    return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
+  let d = dateObj;
+  
+  // 1. 입력 인자 유효성 선검증
+  if (!(d instanceof Date) || isNaN(d.getTime())) {
+    d = new Date(d);
+  }
+  if (isNaN(d.getTime())) {
+    d = new Date(); // 변환에 완전히 실패할 경우 오늘 날짜로 폴백
+  }
+  
+  try {
+    // ko-KR 로케일과 Asia/Seoul 타임존 고정
+    const formatter = new Intl.DateTimeFormat('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatter.formatToParts(d);
+    
+    let year, month, day;
+    for (const part of parts) {
+      if (part.type === 'year') year = parseInt(part.value, 10);
+      if (part.type === 'month') month = parseInt(part.value, 10);
+      if (part.type === 'day') day = parseInt(part.value, 10);
+    }
+    
+    if (year && month && day) {
+      // UTC 기준으로 연, 월(0~11), 일을 설정하여 시간 오프셋 혼선 차단
+      return new Date(Date.UTC(year, month - 1, day));
+    }
+  } catch (e) {
+    console.warn("Intl formatToParts 파싱 실패, 로컬 시간대 기준 폴백 작동:", e);
+  }
+  
+  // 2. Fallback: Intl 미지원 혹은 예외 발생 시 로컬 연/월/일 추출 기반 안전 계산
+  const localYear = d.getFullYear();
+  const localMonth = d.getMonth();
+  const localDate = d.getDate();
+  return new Date(Date.UTC(localYear, localMonth, localDate));
+}
+
+function safeToISODateString(dateObj) {
+  let d = dateObj;
+  
+  // 입력 인자 유효성 및 포맷 검증
+  if (!(d instanceof Date) || isNaN(d.getTime())) {
+    console.warn("safeToISODateString: Invalid date, fallback to today.");
+    d = new Date();
+  }
+  
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
 }
 
 function getEffectiveDate() {
@@ -1300,45 +1353,62 @@ const DrawerOverlay = styled.div`
 
 const DrawerContainer = styled.div`
   position: fixed;
-  bottom: 70px;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
   max-width: 600px;
-  background: var(--sba-modal-bg);
-  border-top: 1px solid var(--sba-border-strong);
-  border-left: 1px solid var(--sba-border-strong);
-  border-right: 1px solid var(--sba-border-strong);
+  
+  background: ${props => props.$isExpanded ? 'var(--sba-modal-bg, #ffffff)' : 'transparent'};
+  border-top: ${props => props.$isExpanded ? '1px solid var(--sba-border-strong, #dddddd)' : 'none'};
+  border-left: ${props => props.$isExpanded ? '1px solid var(--sba-border-strong, #dddddd)' : 'none'};
+  border-right: ${props => props.$isExpanded ? '1px solid var(--sba-border-strong, #dddddd)' : 'none'};
   border-radius: 8px 8px 0 0;
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.04);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: ${props => props.$isExpanded ? '0 -4px 16px rgba(0, 0, 0, 0.08)' : 'none'};
+  
+  height: ${props => props.$isExpanded ? '310px' : '24px'};
   z-index: 100;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: ${props => props.$isExpanded ? '310px' : '16px'};
   cursor: ${props => props.$isExpanded ? 'default' : 'pointer'};
   
+  transition: 
+    background 0.22s ease-in-out,
+    border 0.22s ease-in-out,
+    box-shadow 0.22s ease-in-out,
+    height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    
   &:hover {
-    border-top-color: ${props => props.$isExpanded ? 'var(--sba-border-strong)' : 'var(--sba-text-muted)'};
+    border-top-color: ${props => props.$isExpanded ? 'var(--sba-border-strong)' : 'transparent'};
   }
 `;
 
 const CompactHandle = styled.div`
   width: 100%;
-  height: 16px;
+  height: 24px;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: var(--sba-card-sub-bg);
-  border-bottom: 1px solid var(--sba-border-strong);
-  color: var(--sba-text-subtle);
-  user-select: none;
-  transition: all 0.2s;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
   
-  &:hover {
-    color: var(--sba-text-muted);
-    background: var(--sba-border-strong);
+  .handle-arrow {
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-bottom: ${props => props.$isExpanded ? 'none' : '6px solid var(--sba-text-muted, #cccccc)'};
+    border-top: ${props => props.$isExpanded ? '6px solid var(--sba-text-muted, #cccccc)' : 'none'};
+    transition: transform 0.22s ease-in-out, border-color 0.2s ease;
+  }
+
+  &:hover .handle-arrow {
+    border-bottom-color: var(--sba-text-main, #888888);
+    border-top-color: var(--sba-text-main, #888888);
   }
 `;
 
@@ -1568,17 +1638,19 @@ function NoteEditor({ targetDate, session, passage, verses }) {
 
       <DrawerContainer $isExpanded={isExpanded} onClick={!isExpanded ? () => setIsExpanded(true) : undefined}>
         {!isExpanded ? (
-          <CompactHandle>
-            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 5l4-4 4 4"/>
-            </svg>
+          <CompactHandle $isExpanded={isExpanded}>
+            <div className="handle-arrow" />
           </CompactHandle>
         ) : (
           <>
             <ExpandedHandle onClick={() => setIsExpanded(false)}>
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M1 1l4 4 4-4"/>
-              </svg>
+              <div className="handle-arrow" style={{
+                width: 0,
+                height: 0,
+                borderLeft: '6px solid transparent',
+                borderRight: '6px solid transparent',
+                borderTop: '6px solid var(--sba-text-muted, #cccccc)'
+              }} />
             </ExpandedHandle>
 
             <DrawerHeader>
@@ -4162,11 +4234,20 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
         };
     }, []);
 
+    // 렌더링 안전성 보장 (State 유효 체크 및 복구)
     const effectiveDate = useMemo(() => {
         if (currentDate instanceof Date && !isNaN(currentDate.getTime())) {
             return currentDate;
         }
-        return getEffectiveDate();
+        console.error("Invalid Date가 감지되어 강제 복구를 실행합니다.");
+        return getMidnightKST(new Date());
+    }, [currentDate]);
+
+    // 비동기 갱신 시점에 Invalid Date 상태가 기록된 경우 감지하여 정화
+    useEffect(() => {
+        if (!currentDate || isNaN(currentDate.getTime())) {
+            setCurrentDate(getMidnightKST(new Date()));
+        }
     }, [currentDate]);
 
     const targetKST = useMemo(() => {

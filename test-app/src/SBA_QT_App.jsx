@@ -152,11 +152,20 @@ export default function SBA_QT_App() {
         };
     }, []);
 
+    // 렌더링 안전성 보장 (State 유효 체크 및 복구)
     const effectiveDate = useMemo(() => {
         if (currentDate instanceof Date && !isNaN(currentDate.getTime())) {
             return currentDate;
         }
-        return getEffectiveDate();
+        console.error("Invalid Date가 감지되어 강제 복구를 실행합니다.");
+        return getMidnightKST(new Date());
+    }, [currentDate]);
+
+    // 비동기 갱신 시점에 Invalid Date 상태가 기록된 경우 감지하여 정화
+    useEffect(() => {
+        if (!currentDate || isNaN(currentDate.getTime())) {
+            setCurrentDate(getMidnightKST(new Date()));
+        }
     }, [currentDate]);
 
     const targetKST = useMemo(() => {

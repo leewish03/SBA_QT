@@ -26,9 +26,62 @@ export const SHORT_TO_FULL = Object.fromEntries(
 export const DAYS_ARR = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
 
 export function getMidnightKST(dateObj) {
-    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' });
-    const [year, month, day] = formatter.format(dateObj).split('-');
-    return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
+  let d = dateObj;
+  
+  // 1. 입력 인자 유효성 선검증
+  if (!(d instanceof Date) || isNaN(d.getTime())) {
+    d = new Date(d);
+  }
+  if (isNaN(d.getTime())) {
+    d = new Date(); // 변환에 완전히 실패할 경우 오늘 날짜로 폴백
+  }
+  
+  try {
+    // ko-KR 로케일과 Asia/Seoul 타임존 고정
+    const formatter = new Intl.DateTimeFormat('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatter.formatToParts(d);
+    
+    let year, month, day;
+    for (const part of parts) {
+      if (part.type === 'year') year = parseInt(part.value, 10);
+      if (part.type === 'month') month = parseInt(part.value, 10);
+      if (part.type === 'day') day = parseInt(part.value, 10);
+    }
+    
+    if (year && month && day) {
+      // UTC 기준으로 연, 월(0~11), 일을 설정하여 시간 오프셋 혼선 차단
+      return new Date(Date.UTC(year, month - 1, day));
+    }
+  } catch (e) {
+    console.warn("Intl formatToParts 파싱 실패, 로컬 시간대 기준 폴백 작동:", e);
+  }
+  
+  // 2. Fallback: Intl 미지원 혹은 예외 발생 시 로컬 연/월/일 추출 기반 안전 계산
+  const localYear = d.getFullYear();
+  const localMonth = d.getMonth();
+  const localDate = d.getDate();
+  return new Date(Date.UTC(localYear, localMonth, localDate));
+}
+
+export function safeToISODateString(dateObj) {
+  let d = dateObj;
+  
+  // 입력 인자 유효성 및 포맷 검증
+  if (!(d instanceof Date) || isNaN(d.getTime())) {
+    console.warn("safeToISODateString: Invalid date, fallback to today.");
+    d = new Date();
+  }
+  
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
 }
 
 export function getEffectiveDate() {

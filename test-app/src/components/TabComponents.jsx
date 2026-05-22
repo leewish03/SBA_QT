@@ -23,45 +23,62 @@ const DrawerOverlay = styled.div`
 
 const DrawerContainer = styled.div`
   position: fixed;
-  bottom: 70px;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
   max-width: 600px;
-  background: var(--sba-modal-bg);
-  border-top: 1px solid var(--sba-border-strong);
-  border-left: 1px solid var(--sba-border-strong);
-  border-right: 1px solid var(--sba-border-strong);
+  
+  background: ${props => props.$isExpanded ? 'var(--sba-modal-bg, #ffffff)' : 'transparent'};
+  border-top: ${props => props.$isExpanded ? '1px solid var(--sba-border-strong, #dddddd)' : 'none'};
+  border-left: ${props => props.$isExpanded ? '1px solid var(--sba-border-strong, #dddddd)' : 'none'};
+  border-right: ${props => props.$isExpanded ? '1px solid var(--sba-border-strong, #dddddd)' : 'none'};
   border-radius: 8px 8px 0 0;
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.04);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: ${props => props.$isExpanded ? '0 -4px 16px rgba(0, 0, 0, 0.08)' : 'none'};
+  
+  height: ${props => props.$isExpanded ? '310px' : '24px'};
   z-index: 100;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: ${props => props.$isExpanded ? '310px' : '16px'};
   cursor: ${props => props.$isExpanded ? 'default' : 'pointer'};
   
+  transition: 
+    background 0.22s ease-in-out,
+    border 0.22s ease-in-out,
+    box-shadow 0.22s ease-in-out,
+    height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    
   &:hover {
-    border-top-color: ${props => props.$isExpanded ? 'var(--sba-border-strong)' : 'var(--sba-text-muted)'};
+    border-top-color: ${props => props.$isExpanded ? 'var(--sba-border-strong)' : 'transparent'};
   }
 `;
 
 const CompactHandle = styled.div`
   width: 100%;
-  height: 16px;
+  height: 24px;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: var(--sba-card-sub-bg);
-  border-bottom: 1px solid var(--sba-border-strong);
-  color: var(--sba-text-subtle);
-  user-select: none;
-  transition: all 0.2s;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
   
-  &:hover {
-    color: var(--sba-text-muted);
-    background: var(--sba-border-strong);
+  .handle-arrow {
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-bottom: ${props => props.$isExpanded ? 'none' : '6px solid var(--sba-text-muted, #cccccc)'};
+    border-top: ${props => props.$isExpanded ? '6px solid var(--sba-text-muted, #cccccc)' : 'none'};
+    transition: transform 0.22s ease-in-out, border-color 0.2s ease;
+  }
+
+  &:hover .handle-arrow {
+    border-bottom-color: var(--sba-text-main, #888888);
+    border-top-color: var(--sba-text-main, #888888);
   }
 `;
 
@@ -291,17 +308,19 @@ function NoteEditor({ targetDate, session, passage, verses }) {
 
       <DrawerContainer $isExpanded={isExpanded} onClick={!isExpanded ? () => setIsExpanded(true) : undefined}>
         {!isExpanded ? (
-          <CompactHandle>
-            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 5l4-4 4 4"/>
-            </svg>
+          <CompactHandle $isExpanded={isExpanded}>
+            <div className="handle-arrow" />
           </CompactHandle>
         ) : (
           <>
             <ExpandedHandle onClick={() => setIsExpanded(false)}>
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M1 1l4 4 4-4"/>
-              </svg>
+              <div className="handle-arrow" style={{
+                width: 0,
+                height: 0,
+                borderLeft: '6px solid transparent',
+                borderRight: '6px solid transparent',
+                borderTop: '6px solid var(--sba-text-muted, #cccccc)'
+              }} />
             </ExpandedHandle>
 
             <DrawerHeader>
