@@ -87,16 +87,16 @@ export function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session
                 style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '6px',
-                    background: 'var(--sba-card-sub-bg)',
-                    padding: '6px 14px',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    background: 'var(--sba-card-active)',
+                    padding: '8px 16px',
                     borderRadius: '20px',
                     border: '1px solid var(--sba-border-strong)',
                     userSelect: 'none',
                     transition: 'all 0.2s ease',
                     flex: 1,
-                    maxWidth: '250px'
+                    maxWidth: '280px'
                 }}
             >
                 <button 
@@ -111,12 +111,12 @@ export function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '4px',
+                        padding: '6px',
                         borderRadius: '50%',
                         transition: 'background 0.2s'
                     }}
                 >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                 </button>
                 
                 <h1 
@@ -127,13 +127,12 @@ export function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session
                         alignItems: 'center', 
                         gap: '4px', 
                         margin: 0,
-                        fontSize: '0.9rem',
+                        fontSize: '1.05rem',
                         fontWeight: '700',
                         color: 'var(--sba-text)'
                     }}
                 >
                     {month}월 {day}일 {dayName}요일
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                 </h1>
                 
                 <button 
@@ -148,12 +147,12 @@ export function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '4px',
+                        padding: '6px',
                         borderRadius: '50%',
                         transition: 'background 0.2s'
                     }}
                 >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
             </div>
             <div style={{display:'flex', gap:'6px', alignItems: 'center'}}>
