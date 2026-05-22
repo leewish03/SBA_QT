@@ -21,6 +21,7 @@ def bundle_to_single_jsx():
     nav = read_file(os.path.join(base_dir, "components", "NavComponents.jsx"))
     tab = read_file(os.path.join(base_dir, "components", "TabComponents.jsx"))
     weekly = read_file(os.path.join(base_dir, "components", "WeeklyAndModals.jsx"))
+    reactbits = read_file(os.path.join(base_dir, "components", "ReactBits.jsx"))
     app = read_file(os.path.join(base_dir, "SBA_QT_App.jsx"))
     
     def strip_imports_exports(text):
@@ -45,6 +46,7 @@ def bundle_to_single_jsx():
     nav_clean = strip_imports_exports(nav)
     tab_clean = strip_imports_exports(tab)
     weekly_clean = strip_imports_exports(weekly)
+    reactbits_clean = strip_imports_exports(reactbits)
     
     app_clean = strip_imports_exports(app)
     app_clean = app_clean.replace('<div className={`sba-app-container ${isDark ? \'dark\' : \'\'}`}>', '<SbaStyledWrapper className={`sba-app-container ${isDark ? \'dark\' : \'\'}`}>\n        <GlobalStyle />')
@@ -82,6 +84,8 @@ const SbaStyledWrapper = styled.div`
 // ==========================================
 // 4. Components
 // ==========================================
+{reactbits_clean}
+
 {nav_clean}
 
 {tab_clean}

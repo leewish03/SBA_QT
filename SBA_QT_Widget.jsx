@@ -726,6 +726,20 @@ const SbaStyledWrapper = styled.div`
     box-shadow: 0 4px 12px rgba(0,0,0,0.02);
 }
 
+/* 날짜 스와이프 및 네비게이션 스타일 */
+.sba-date-arrow-btn:hover {
+    background: var(--sba-card-active) !important;
+    color: var(--sba-text) !important;
+}
+
+.sba-date-arrow-btn:active {
+    transform: scale(0.92);
+}
+
+.sba-date-nav-wrapper:hover {
+    border-color: var(--sba-text-muted) !important;
+}
+
 `;
 
 // ==========================================
@@ -1232,6 +1246,182 @@ async function syncNotes(userId) {
 // 4. Components
 // ==========================================
 
+// ==========================================
+// 1. ShinyText (은은하게 지나가는 펄 광원 텍스트 효과)
+// ==========================================
+const shine = keyframes`
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -20% 0;
+  }
+`;
+
+const StyledShinySpan = styled.span`
+  color: ${({ $disabled }) => $disabled ? 'inherit' : 'transparent'};
+  background: ${({ $disabled, $shineColor, $baseColor }) => $disabled 
+    ? 'none' 
+    : `linear-gradient(120deg, ${$baseColor || 'var(--sba-text-secondary, rgba(128, 128, 128, 0.6))'} 30%, ${$shineColor || 'var(--sba-text, #ffffff)'} 50%, ${$baseColor || 'var(--sba-text-secondary, rgba(128, 128, 128, 0.6))'} 70%)`
+  };
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: ${shine} ${({ $speed }) => $speed || '2.5s'} linear infinite;
+  display: inline-block;
+  font-weight: inherit;
+`;
+
+function ShinyText({ text, speed = '2.5s', shineColor, baseColor, disabled = false, className, style }) {
+  return (
+    <StyledShinySpan 
+      $speed={speed} 
+      $shineColor={shineColor} 
+      $baseColor={baseColor}
+      $disabled={disabled}
+      className={className}
+      style={style}
+    >
+      {text}
+    </StyledShinySpan>
+  );
+}
+
+// ==========================================
+// 2. DecryptedText (깜빡이는 해독 텍스트 효과)
+// ==========================================
+function DecryptedText({ 
+  text, 
+  speed = 40, 
+  maxIterations = 8, 
+  className, 
+  style 
+}) {
+  const [displayText, setDisplayText] = useState('');
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+?';
+
+  useEffect(() => {
+    let active = true;
+    let iteration = 0;
+    const targetText = text || '';
+    
+    const interval = setInterval(() => {
+      if (!active) return;
+      
+      const scrambled = targetText
+        .split('')
+        .map((char, index) => {
+          if (char === ' ') return ' ';
+          
+          // 순차적 노출: 이터레이션이 특정 횟수를 지날 때마다 앞의 글자들을 고정
+          if (index < iteration / maxIterations) {
+            return char;
+          }
+          
+          return chars[Math.floor(Math.random() * chars.length)];
+        })
+        .join('');
+      
+      setDisplayText(scrambled);
+      
+      if (iteration >= targetText.length * maxIterations) {
+        setDisplayText(targetText);
+        clearInterval(interval);
+      }
+      
+      iteration++;
+    }, speed);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [text, speed, maxIterations]);
+
+  return <span className={className} style={style}>{displayText}</span>;
+}
+
+// ==========================================
+// 3. SpotlightCard (마우스/터치 중심 광원 카드 효과)
+// ==========================================
+const CardWrapper = styled.div`
+  position: relative;
+  overflow: hidden;
+  border-radius: inherit;
+  width: 100%;
+  height: 100%;
+`;
+
+const SpotlightOverlay = styled.div.attrs(props => ({
+  style: {
+    opacity: props.$opacity,
+    background: `radial-gradient(circle 140px at ${props.$x}px ${props.$y}px, var(--sba-spotlight-color, rgba(0, 102, 204, 0.12)), transparent 80%)`
+  }
+}))`
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  transition: opacity 0.4s ease;
+`;
+
+const CardContent = styled.div`
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+`;
+
+function SpotlightCard({ children, className, style, ...rest }) {
+  const containerRef = useRef(null);
+  const [coords, setCoords] = useState({ x: 0, y: 0 });
+  const [opacity, setOpacity] = useState(0);
+
+  const handleMouseMove = (e) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setCoords({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    });
+  };
+
+  const handleTouchMove = (e) => {
+    if (!containerRef.current || e.touches.length === 0) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const touch = e.touches[0];
+    setCoords({
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top
+    });
+  };
+
+  return (
+    <CardWrapper
+      ref={containerRef}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={() => setOpacity(1)}
+      onMouseLeave={() => setOpacity(0)}
+      onTouchStart={(e) => {
+        setOpacity(1);
+        handleTouchMove(e);
+      }}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={() => setOpacity(0)}
+      className={className}
+      style={style}
+      {...rest}
+    >
+      <SpotlightOverlay $x={coords.x} $y={coords.y} $opacity={opacity} />
+      <CardContent>
+        {children}
+      </CardContent>
+    </CardWrapper>
+  );
+}
+
+
+
 const ICONS = {
     today: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>,
     reading: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"/><path d="m9 10 2 2 4-4"/></svg>,
@@ -1240,11 +1430,57 @@ const ICONS = {
     sharing: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 };
 
-function TopHeader({ currentDate, onOpenCalendar, session, onOpenAuth, onOpenSettings }) {
+function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session, onOpenAuth, onOpenSettings, addToast }) {
     const month = currentDate.getMonth() + 1;
     const day = currentDate.getDate();
     const days = ["일", "월", "화", "수", "목", "금", "토"];
     const dayName = days[currentDate.getDay()];
+
+    const [touchStart, setTouchStart] = useState({ x: 0, y: 0 });
+
+    const handlePrevDay = (e) => {
+        if (e) e.stopPropagation();
+        setCurrentDate(prev => {
+            const next = new Date(prev.getTime());
+            next.setDate(next.getDate() - 1);
+            return next;
+        });
+        if (addToast) addToast("이전 날짜로 이동했습니다.");
+    };
+
+    const handleNextDay = (e) => {
+        if (e) e.stopPropagation();
+        setCurrentDate(prev => {
+            const next = new Date(prev.getTime());
+            next.setDate(next.getDate() + 1);
+            return next;
+        });
+        if (addToast) addToast("다음 날짜로 이동했습니다.");
+    };
+
+    const handleTouchStart = (e) => {
+        setTouchStart({
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY
+        });
+    };
+
+    const handleTouchEnd = (e) => {
+        if (touchStart.x === 0 && touchStart.y === 0) return;
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+        const diffX = touchEndX - touchStart.x;
+        const diffY = touchEndY - touchStart.y;
+
+        if (Math.abs(diffX) > 40 && Math.abs(diffY) < 50) {
+            if (diffX > 40) {
+                handlePrevDay();
+            } else if (diffX < -40) {
+                handleNextDay();
+            }
+        }
+        setTouchStart({ x: 0, y: 0 });
+    };
 
     const handleLogout = async () => {
         if (window.confirm("로그아웃 하시겠습니까?")) {
@@ -1265,10 +1501,82 @@ function TopHeader({ currentDate, onOpenCalendar, session, onOpenAuth, onOpenSet
 
     return (
         <header className="sba-header">
-            <h1 onClick={onOpenCalendar} style={{cursor:'pointer', display:'flex', alignItems:'center', gap:'6px', userSelect:'none'}}>
-                {month}월 {day}일 {dayName}요일
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </h1>
+            <div 
+                className="sba-date-nav-wrapper"
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '6px',
+                    background: 'var(--sba-card-sub-bg)',
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    border: '1px solid var(--sba-border-strong)',
+                    userSelect: 'none',
+                    transition: 'all 0.2s ease',
+                    flex: 1,
+                    maxWidth: '250px'
+                }}
+            >
+                <button 
+                    onClick={handlePrevDay} 
+                    className="sba-date-arrow-btn"
+                    title="이전 날"
+                    style={{
+                        background: 'none', 
+                        border: 'none', 
+                        color: 'var(--sba-text-secondary)', 
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                        borderRadius: '50%',
+                        transition: 'background 0.2s'
+                    }}
+                >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                
+                <h1 
+                    onClick={onOpenCalendar} 
+                    style={{
+                        cursor: 'pointer', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '4px', 
+                        margin: 0,
+                        fontSize: '0.9rem',
+                        fontWeight: '700',
+                        color: 'var(--sba-text)'
+                    }}
+                >
+                    {month}월 {day}일 {dayName}요일
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                </h1>
+                
+                <button 
+                    onClick={handleNextDay} 
+                    className="sba-date-arrow-btn"
+                    title="다음 날"
+                    style={{
+                        background: 'none', 
+                        border: 'none', 
+                        color: 'var(--sba-text-secondary)', 
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                        borderRadius: '50%',
+                        transition: 'background 0.2s'
+                    }}
+                >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+            </div>
             <div style={{display:'flex', gap:'6px', alignItems: 'center'}}>
                 {/* 설정 버튼 */}
                 <button className="sba-header-icon" onClick={onOpenSettings} title="설정" style={{width:'32px', height:'32px', padding:0}}>
@@ -1503,10 +1811,15 @@ const StyledTextarea = styled.textarea`
 
 function NoteEditor({ targetDate, session }) {
   const [content, setContent] = useState('');
+  const contentRef = useRef(content);
   const [saveStatus, setSaveStatus] = useState('저장 완료');
   const [isExpanded, setIsExpanded] = useState(false);
   const timerRef = useRef(null);
   const isDirtyRef = useRef(false);
+
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
 
   const dateStr = safeToISODateString(targetDate);
 
@@ -1538,10 +1851,14 @@ function NoteEditor({ targetDate, session }) {
             try {
               const raw = localStorage.getItem('sba_qt_notes');
               const parsed = raw ? JSON.parse(raw) : {};
-              parsed[dateStr] = {
-                content: data.content,
-                updated_at: new Date().toISOString()
-              };
+              if (!data.content || data.content.trim() === '') {
+                delete parsed[dateStr];
+              } else {
+                parsed[dateStr] = {
+                  content: data.content,
+                  updated_at: new Date().toISOString()
+                };
+              }
               localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
             } catch (e) {
               console.error(e);
@@ -1558,10 +1875,14 @@ function NoteEditor({ targetDate, session }) {
     try {
       const raw = localStorage.getItem('sba_qt_notes');
       const parsed = raw ? JSON.parse(raw) : {};
-      parsed[dateStr] = {
-        content: text,
-        updated_at: now
-      };
+      if (!text || text.trim() === '') {
+        delete parsed[dateStr];
+      } else {
+        parsed[dateStr] = {
+          content: text,
+          updated_at: now
+        };
+      }
       localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
     } catch (e) {
       console.error('로컬 메모 저장 실패:', e);
@@ -1571,16 +1892,24 @@ function NoteEditor({ targetDate, session }) {
 
     if (session) {
       try {
-        const { error } = await supabase
-          .from('qt_notes')
-          .upsert({
-            user_id: session.user.id,
-            target_date: dateStr,
-            content: text,
-            updated_at: now
-          }, { onConflict: 'user_id,target_date' });
-
-        if (error) throw error;
+        if (!text || text.trim() === '') {
+          const { error } = await supabase
+            .from('qt_notes')
+            .delete()
+            .eq('user_id', session.user.id)
+            .eq('target_date', dateStr);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('qt_notes')
+            .upsert({
+              user_id: session.user.id,
+              target_date: dateStr,
+              content: text,
+              updated_at: now
+            }, { onConflict: 'user_id,target_date' });
+          if (error) throw error;
+        }
         setSaveStatus('저장 완료');
       } catch (err) {
         console.error('클라우드 메모 저장 실패:', err);
@@ -1608,18 +1937,43 @@ function NoteEditor({ targetDate, session }) {
   };
 
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+    const handleBeforeUnload = () => {
       if (isDirtyRef.current) {
-        saveNote(content);
+        const text = contentRef.current;
+        const now = new Date().toISOString();
+        try {
+          const raw = localStorage.getItem('sba_qt_notes');
+          const parsed = raw ? JSON.parse(raw) : {};
+          if (!text || text.trim() === '') {
+            delete parsed[dateStr];
+          } else {
+            parsed[dateStr] = {
+              content: text,
+              updated_at: now
+            };
+          }
+          localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
+        } catch (e) {
+          console.error(e);
+        }
       }
     };
-  }, [content]);
 
-  const handleBlur = () => {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (isDirtyRef.current) {
+        saveNote(contentRef.current);
+      }
+    };
+  }, [dateStr]);
+
+  const handleBlur = (e) => {
     if (isDirtyRef.current) {
       if (timerRef.current) clearTimeout(timerRef.current);
-      saveNote(content);
+      saveNote(e.target.value);
     }
   };
 
@@ -1629,7 +1983,7 @@ function NoteEditor({ targetDate, session }) {
 
       <DrawerContainer $isExpanded={isExpanded} onClick={!isExpanded ? () => setIsExpanded(true) : undefined}>
         {!isExpanded ? (
-          <CompactHandle $isExpanded={isExpanded}>
+          <CompactHandle className="sba-note-handle" $isExpanded={isExpanded}>
             <div className="handle-arrow" />
           </CompactHandle>
         ) : (
@@ -1653,6 +2007,7 @@ function NoteEditor({ targetDate, session }) {
 
             <TextareaWrapper>
               <StyledTextarea
+                className="sba-note-textarea"
                 placeholder="오늘 말씀에서 깨달은 은혜와 묵상 내용을 기록해 보세요..."
                 value={content}
                 onChange={handleChange}
@@ -2985,6 +3340,16 @@ function BookmarkSelectModal({ isOpen, onClose, onSelect, addToast }) {
     </DetailModalOverlay>
   );
 }
+
+// ==========================================
+const SharingCard = styled.div`
+  background: var(--sba-card-bg);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
+`;
 
 function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const [reflections, setReflections] = useState([]);
@@ -4613,56 +4978,6 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
     const [showSettings, setShowSettings] = useState(false);
     const [showAuth, setShowAuth] = useState(false);
     const [adminClicks, setAdminClicks] = useState(0);
-
-    // 스와이프 제스처 상태
-    const [touchStart, setTouchStart] = useState({ x: 0, y: 0 });
-
-    const handleTouchStart = (e) => {
-        // 모달 내부, 입력 필드, 또는 특정 예외 영역에서의 터치는 무시
-        if (e.target.closest('textarea') || e.target.closest('input') || e.target.closest('[role="dialog"]') || e.target.closest('.sba-modal-content') || e.target.closest('.sba-weekly-list') || e.target.closest('.sba-bottom-nav') || e.target.closest('.sba-header')) {
-            return;
-        }
-        setTouchStart({
-            x: e.touches[0].clientX,
-            y: e.touches[0].clientY
-        });
-    };
-
-    const handleTouchEnd = (e) => {
-        if (touchStart.x === 0 && touchStart.y === 0) return;
-        
-        if (e.target.closest('textarea') || e.target.closest('input') || e.target.closest('[role="dialog"]') || e.target.closest('.sba-modal-content') || e.target.closest('.sba-weekly-list') || e.target.closest('.sba-bottom-nav') || e.target.closest('.sba-header')) {
-            setTouchStart({ x: 0, y: 0 });
-            return;
-        }
-
-        const touchEndX = e.changedTouches[0].clientX;
-        const touchEndY = e.changedTouches[0].clientY;
-        const diffX = touchEndX - touchStart.x;
-        const diffY = touchEndY - touchStart.y;
-
-        // X축 이동이 유의미하고 Y축 이동이 세로 스크롤 범위 내인 경우
-        if (Math.abs(diffX) > 70 && Math.abs(diffY) < 80) {
-            if (diffX > 70) {
-                // 오른쪽 스와이프 -> 이전 날짜
-                setCurrentDate(prev => {
-                    const next = new Date(prev.getTime());
-                    next.setDate(next.getDate() - 1);
-                    return next;
-                });
-                addToast("이전 날짜로 이동했습니다.");
-            } else if (diffX < -70) {
-                // 왼쪽 스와이프 -> 다음 날짜
-                setCurrentDate(prev => {
-                    const next = new Date(prev.getTime());
-                    next.setDate(next.getDate() + 1);
-                    return next;
-                });
-                addToast("다음 날짜로 이동했습니다.");
-            }
-        }
-        setTouchStart({ x: 0, y: 0 });
-    };
     
     // 시작 기준일 상태 (기본값 설정 및 로컬스토리지 로딩)
     const [startDateStr, setStartDateStr] = useState(() => {
@@ -5042,17 +5357,15 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
 
             <TopHeader 
                 currentDate={effectiveDate} 
+                setCurrentDate={setCurrentDate}
                 onOpenCalendar={() => setShowCalendar(true)} 
                 session={session}
                 onOpenAuth={() => setShowAuth(true)}
                 onOpenSettings={() => setShowSettings(true)}
+                addToast={addToast}
             />
             
-            <main 
-                className="sba-content"
-                onTouchStart={handleTouchStart}
-                onTouchEnd={handleTouchEnd}
-            >
+            <main className="sba-content">
                 {renderContent()}
                 <AppFooter />
             </main>

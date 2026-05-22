@@ -9,11 +9,57 @@ const ICONS = {
     sharing: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 };
 
-export function TopHeader({ currentDate, onOpenCalendar, session, onOpenAuth, onOpenSettings }) {
+export function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session, onOpenAuth, onOpenSettings, addToast }) {
     const month = currentDate.getMonth() + 1;
     const day = currentDate.getDate();
     const days = ["일", "월", "화", "수", "목", "금", "토"];
     const dayName = days[currentDate.getDay()];
+
+    const [touchStart, setTouchStart] = useState({ x: 0, y: 0 });
+
+    const handlePrevDay = (e) => {
+        if (e) e.stopPropagation();
+        setCurrentDate(prev => {
+            const next = new Date(prev.getTime());
+            next.setDate(next.getDate() - 1);
+            return next;
+        });
+        if (addToast) addToast("이전 날짜로 이동했습니다.");
+    };
+
+    const handleNextDay = (e) => {
+        if (e) e.stopPropagation();
+        setCurrentDate(prev => {
+            const next = new Date(prev.getTime());
+            next.setDate(next.getDate() + 1);
+            return next;
+        });
+        if (addToast) addToast("다음 날짜로 이동했습니다.");
+    };
+
+    const handleTouchStart = (e) => {
+        setTouchStart({
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY
+        });
+    };
+
+    const handleTouchEnd = (e) => {
+        if (touchStart.x === 0 && touchStart.y === 0) return;
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+        const diffX = touchEndX - touchStart.x;
+        const diffY = touchEndY - touchStart.y;
+
+        if (Math.abs(diffX) > 40 && Math.abs(diffY) < 50) {
+            if (diffX > 40) {
+                handlePrevDay();
+            } else if (diffX < -40) {
+                handleNextDay();
+            }
+        }
+        setTouchStart({ x: 0, y: 0 });
+    };
 
     const handleLogout = async () => {
         if (window.confirm("로그아웃 하시겠습니까?")) {
@@ -34,10 +80,82 @@ export function TopHeader({ currentDate, onOpenCalendar, session, onOpenAuth, on
 
     return (
         <header className="sba-header">
-            <h1 onClick={onOpenCalendar} style={{cursor:'pointer', display:'flex', alignItems:'center', gap:'6px', userSelect:'none'}}>
-                {month}월 {day}일 {dayName}요일
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </h1>
+            <div 
+                className="sba-date-nav-wrapper"
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '6px',
+                    background: 'var(--sba-card-sub-bg)',
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    border: '1px solid var(--sba-border-strong)',
+                    userSelect: 'none',
+                    transition: 'all 0.2s ease',
+                    flex: 1,
+                    maxWidth: '250px'
+                }}
+            >
+                <button 
+                    onClick={handlePrevDay} 
+                    className="sba-date-arrow-btn"
+                    title="이전 날"
+                    style={{
+                        background: 'none', 
+                        border: 'none', 
+                        color: 'var(--sba-text-secondary)', 
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                        borderRadius: '50%',
+                        transition: 'background 0.2s'
+                    }}
+                >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                
+                <h1 
+                    onClick={onOpenCalendar} 
+                    style={{
+                        cursor: 'pointer', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '4px', 
+                        margin: 0,
+                        fontSize: '0.9rem',
+                        fontWeight: '700',
+                        color: 'var(--sba-text)'
+                    }}
+                >
+                    {month}월 {day}일 {dayName}요일
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                </h1>
+                
+                <button 
+                    onClick={handleNextDay} 
+                    className="sba-date-arrow-btn"
+                    title="다음 날"
+                    style={{
+                        background: 'none', 
+                        border: 'none', 
+                        color: 'var(--sba-text-secondary)', 
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                        borderRadius: '50%',
+                        transition: 'background 0.2s'
+                    }}
+                >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+            </div>
             <div style={{display:'flex', gap:'6px', alignItems: 'center'}}>
                 {/* 설정 버튼 */}
                 <button className="sba-header-icon" onClick={onOpenSettings} title="설정" style={{width:'32px', height:'32px', padding:0}}>

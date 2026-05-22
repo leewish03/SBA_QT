@@ -714,3 +714,17 @@
     margin-bottom: 20px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.02);
 }
+
+/* 날짜 스와이프 및 네비게이션 스타일 */
+.sba-date-arrow-btn:hover {
+    background: var(--sba-card-active) !important;
+    color: var(--sba-text) !important;
+}
+
+.sba-date-arrow-btn:active {
+    transform: scale(0.92);
+}
+
+.sba-date-nav-wrapper:hover {
+    border-color: var(--sba-text-muted) !important;
+}

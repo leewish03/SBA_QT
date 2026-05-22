@@ -182,10 +182,15 @@ const StyledTextarea = styled.textarea`
 
 function NoteEditor({ targetDate, session }) {
   const [content, setContent] = useState('');
+  const contentRef = useRef(content);
   const [saveStatus, setSaveStatus] = useState('저장 완료');
   const [isExpanded, setIsExpanded] = useState(false);
   const timerRef = useRef(null);
   const isDirtyRef = useRef(false);
+
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
 
   const dateStr = safeToISODateString(targetDate);
 
@@ -217,10 +222,14 @@ function NoteEditor({ targetDate, session }) {
             try {
               const raw = localStorage.getItem('sba_qt_notes');
               const parsed = raw ? JSON.parse(raw) : {};
-              parsed[dateStr] = {
-                content: data.content,
-                updated_at: new Date().toISOString()
-              };
+              if (!data.content || data.content.trim() === '') {
+                delete parsed[dateStr];
+              } else {
+                parsed[dateStr] = {
+                  content: data.content,
+                  updated_at: new Date().toISOString()
+                };
+              }
               localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
             } catch (e) {
               console.error(e);
@@ -237,10 +246,14 @@ function NoteEditor({ targetDate, session }) {
     try {
       const raw = localStorage.getItem('sba_qt_notes');
       const parsed = raw ? JSON.parse(raw) : {};
-      parsed[dateStr] = {
-        content: text,
-        updated_at: now
-      };
+      if (!text || text.trim() === '') {
+        delete parsed[dateStr];
+      } else {
+        parsed[dateStr] = {
+          content: text,
+          updated_at: now
+        };
+      }
       localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
     } catch (e) {
       console.error('로컬 메모 저장 실패:', e);
@@ -250,16 +263,24 @@ function NoteEditor({ targetDate, session }) {
 
     if (session) {
       try {
-        const { error } = await supabase
-          .from('qt_notes')
-          .upsert({
-            user_id: session.user.id,
-            target_date: dateStr,
-            content: text,
-            updated_at: now
-          }, { onConflict: 'user_id,target_date' });
-
-        if (error) throw error;
+        if (!text || text.trim() === '') {
+          const { error } = await supabase
+            .from('qt_notes')
+            .delete()
+            .eq('user_id', session.user.id)
+            .eq('target_date', dateStr);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('qt_notes')
+            .upsert({
+              user_id: session.user.id,
+              target_date: dateStr,
+              content: text,
+              updated_at: now
+            }, { onConflict: 'user_id,target_date' });
+          if (error) throw error;
+        }
         setSaveStatus('저장 완료');
       } catch (err) {
         console.error('클라우드 메모 저장 실패:', err);
@@ -287,18 +308,43 @@ function NoteEditor({ targetDate, session }) {
   };
 
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+    const handleBeforeUnload = () => {
       if (isDirtyRef.current) {
-        saveNote(content);
+        const text = contentRef.current;
+        const now = new Date().toISOString();
+        try {
+          const raw = localStorage.getItem('sba_qt_notes');
+          const parsed = raw ? JSON.parse(raw) : {};
+          if (!text || text.trim() === '') {
+            delete parsed[dateStr];
+          } else {
+            parsed[dateStr] = {
+              content: text,
+              updated_at: now
+            };
+          }
+          localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
+        } catch (e) {
+          console.error(e);
+        }
       }
     };
-  }, [content]);
 
-  const handleBlur = () => {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (isDirtyRef.current) {
+        saveNote(contentRef.current);
+      }
+    };
+  }, [dateStr]);
+
+  const handleBlur = (e) => {
     if (isDirtyRef.current) {
       if (timerRef.current) clearTimeout(timerRef.current);
-      saveNote(content);
+      saveNote(e.target.value);
     }
   };
 
@@ -308,7 +354,7 @@ function NoteEditor({ targetDate, session }) {
 
       <DrawerContainer $isExpanded={isExpanded} onClick={!isExpanded ? () => setIsExpanded(true) : undefined}>
         {!isExpanded ? (
-          <CompactHandle $isExpanded={isExpanded}>
+          <CompactHandle className="sba-note-handle" $isExpanded={isExpanded}>
             <div className="handle-arrow" />
           </CompactHandle>
         ) : (
@@ -332,6 +378,7 @@ function NoteEditor({ targetDate, session }) {
 
             <TextareaWrapper>
               <StyledTextarea
+                className="sba-note-textarea"
                 placeholder="오늘 말씀에서 깨달은 은혜와 묵상 내용을 기록해 보세요..."
                 value={content}
                 onChange={handleChange}
@@ -1664,6 +1711,16 @@ function BookmarkSelectModal({ isOpen, onClose, onSelect, addToast }) {
     </DetailModalOverlay>
   );
 }
+
+// ==========================================
+const SharingCard = styled.div`
+  background: var(--sba-card-bg);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
+`;
 
 export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const [reflections, setReflections] = useState([]);

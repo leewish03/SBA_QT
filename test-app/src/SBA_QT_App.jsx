@@ -52,56 +52,6 @@ export default function SBA_QT_App() {
     const [showSettings, setShowSettings] = useState(false);
     const [showAuth, setShowAuth] = useState(false);
     const [adminClicks, setAdminClicks] = useState(0);
-
-    // 스와이프 제스처 상태
-    const [touchStart, setTouchStart] = useState({ x: 0, y: 0 });
-
-    const handleTouchStart = (e) => {
-        // 모달 내부, 입력 필드, 또는 특정 예외 영역에서의 터치는 무시
-        if (e.target.closest('textarea') || e.target.closest('input') || e.target.closest('[role="dialog"]') || e.target.closest('.sba-modal-content') || e.target.closest('.sba-weekly-list') || e.target.closest('.sba-bottom-nav') || e.target.closest('.sba-header')) {
-            return;
-        }
-        setTouchStart({
-            x: e.touches[0].clientX,
-            y: e.touches[0].clientY
-        });
-    };
-
-    const handleTouchEnd = (e) => {
-        if (touchStart.x === 0 && touchStart.y === 0) return;
-        
-        if (e.target.closest('textarea') || e.target.closest('input') || e.target.closest('[role="dialog"]') || e.target.closest('.sba-modal-content') || e.target.closest('.sba-weekly-list') || e.target.closest('.sba-bottom-nav') || e.target.closest('.sba-header')) {
-            setTouchStart({ x: 0, y: 0 });
-            return;
-        }
-
-        const touchEndX = e.changedTouches[0].clientX;
-        const touchEndY = e.changedTouches[0].clientY;
-        const diffX = touchEndX - touchStart.x;
-        const diffY = touchEndY - touchStart.y;
-
-        // X축 이동이 유의미하고 Y축 이동이 세로 스크롤 범위 내인 경우
-        if (Math.abs(diffX) > 70 && Math.abs(diffY) < 80) {
-            if (diffX > 70) {
-                // 오른쪽 스와이프 -> 이전 날짜
-                setCurrentDate(prev => {
-                    const next = new Date(prev.getTime());
-                    next.setDate(next.getDate() - 1);
-                    return next;
-                });
-                addToast("이전 날짜로 이동했습니다.");
-            } else if (diffX < -70) {
-                // 왼쪽 스와이프 -> 다음 날짜
-                setCurrentDate(prev => {
-                    const next = new Date(prev.getTime());
-                    next.setDate(next.getDate() + 1);
-                    return next;
-                });
-                addToast("다음 날짜로 이동했습니다.");
-            }
-        }
-        setTouchStart({ x: 0, y: 0 });
-    };
     
     // 시작 기준일 상태 (기본값 설정 및 로컬스토리지 로딩)
     const [startDateStr, setStartDateStr] = useState(() => {
@@ -480,17 +430,15 @@ export default function SBA_QT_App() {
 
             <TopHeader 
                 currentDate={effectiveDate} 
+                setCurrentDate={setCurrentDate}
                 onOpenCalendar={() => setShowCalendar(true)} 
                 session={session}
                 onOpenAuth={() => setShowAuth(true)}
                 onOpenSettings={() => setShowSettings(true)}
+                addToast={addToast}
             />
             
-            <main 
-                className="sba-content"
-                onTouchStart={handleTouchStart}
-                onTouchEnd={handleTouchEnd}
-            >
+            <main className="sba-content">
                 {renderContent()}
                 <AppFooter />
             </main>
