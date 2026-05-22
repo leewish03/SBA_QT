@@ -369,9 +369,10 @@ export default function SBA_QT_App() {
             {isSplashVisible && (
                 <div className={`sba-splash-screen ${isSplashFading ? 'fade-out' : ''}`}>
                     <div className="sba-splash-content">
-                        <div className="sba-splash-main-title">서울북부교회</div>
-                        <div className="sba-splash-sub-title">QT & 통독</div>
-                        <div className="sba-splash-desc">말씀으로 하루를 여는 은혜의 시간</div>
+                        <div className="sba-splash-logo">⛪</div>
+                        <h1 className="sba-splash-main-title">서울북부교회</h1>
+                        <h2 className="sba-splash-sub-title">QT & 통독</h2>
+                        <p className="sba-splash-desc">말씀으로 하루를 여는 은혜의 시간</p>
                     </div>
                     <div className="sba-splash-footer">
                         개발: 이소원 형제

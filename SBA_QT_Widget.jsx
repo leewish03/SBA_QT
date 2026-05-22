@@ -63,7 +63,7 @@ const SbaStyledWrapper = styled.div`
     flex-direction: column;
     box-shadow: 0 4px 20px rgba(0,0,0,0.05);
     position: relative;
-    padding-bottom: 105px; /* Space for bottom nav (70px) + closed NoteEditor drawer (24px) + margin */
+    padding-bottom: 97px; /* Space for bottom nav (70px) + closed NoteEditor drawer (16px) + margin */
     transition: background-color 0.3s, color 0.3s;
 }
 
@@ -423,32 +423,45 @@ const SbaStyledWrapper = styled.div`
     animation: fadeInSplash 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
+}
+
+.sba-splash-logo {
+    font-size: 2rem;
+    margin-bottom: 8px;
+    animation: pulseLogo 2s infinite ease-in-out;
+}
+
+@keyframes pulseLogo {
+    0% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.05); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.9; }
 }
 
 .sba-splash-main-title {
-    font-size: 2.5rem;
-    font-weight: 800;
+    font-size: 1.85rem;
+    font-weight: 700;
     color: var(--sba-splash-title);
     margin: 0;
-    letter-spacing: -0.05em;
-    line-height: 1.2;
+    letter-spacing: -0.04em;
+    line-height: 1.25;
     word-break: keep-all;
 }
 
 .sba-splash-sub-title {
-    font-size: 1.5rem;
+    font-size: 1.15rem;
     font-weight: 500;
     color: var(--sba-splash-sub);
     margin: 0;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.02em;
     line-height: 1.2;
 }
 
 .sba-splash-desc {
-    font-size: 0.875rem;
+    font-size: 0.85rem;
     color: var(--sba-splash-desc);
-    margin-top: 16px;
+    margin-top: 12px;
     letter-spacing: -0.01em;
 }
 
@@ -457,7 +470,7 @@ const SbaStyledWrapper = styled.div`
     bottom: 40px;
     font-size: 0.75rem;
     color: var(--sba-text-subtle);
-    letter-spacing: 0.05em;
+    letter-spacing: 0.03em;
     animation: fadeInSplash 1.2s ease-out forwards;
 }
 
@@ -1251,10 +1264,10 @@ function AppFooter() {
 const DrawerOverlay = styled.div`
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: rgba(0, 0, 0, 0.15);
   z-index: 90;
   backdrop-filter: blur(1px);
-  animation: fadeIn 0.2s ease-out;
+  animation: fadeIn 0.15s ease-out;
   @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -1272,14 +1285,14 @@ const DrawerContainer = styled.div`
   border-top: 1px solid var(--sba-border-strong);
   border-left: 1px solid var(--sba-border-strong);
   border-right: 1px solid var(--sba-border-strong);
-  border-radius: 16px 16px 0 0;
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.06);
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.04);
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 100;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: ${props => props.$isExpanded ? '310px' : '24px'};
+  height: ${props => props.$isExpanded ? '310px' : '16px'};
   cursor: ${props => props.$isExpanded ? 'default' : 'pointer'};
   
   &:hover {
@@ -1289,12 +1302,11 @@ const DrawerContainer = styled.div`
 
 const CompactHandle = styled.div`
   width: 100%;
-  height: 24px;
+  height: 16px;
   display: flex;
   justify-content: center;
   align-items: center;
   color: var(--sba-text-secondary);
-  font-size: 0.75rem;
   user-select: none;
   transition: color 0.2s;
   
@@ -1307,32 +1319,32 @@ const DrawerHeader = styled.div`
   display: flex; 
   justify-content: space-between; 
   align-items: center; 
-  padding: 8px 20px 10px;
-  border-bottom: 1px solid var(--sba-border);
+  padding: 6px 16px 8px;
+  border-bottom: 1px solid var(--sba-border-strong);
 `;
 
 const HeaderTitle = styled.h3`
   margin: 0;
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 0.85rem;
+  font-weight: 600;
   color: var(--sba-text);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 `;
 
 const StatusBadge = styled.span`
   font-size: 0.7rem;
   color: var(--sba-text-secondary);
   background: var(--sba-card-sub-bg);
-  padding: 2px 8px;
-  border-radius: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
   font-weight: 500;
-  border: 1px solid var(--sba-border);
+  border: 1px solid var(--sba-border-strong);
 `;
 
 const CardButton = styled.button`
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1340,9 +1352,9 @@ const CardButton = styled.button`
   border: 1px solid var(--sba-border-strong);
   color: var(--sba-text);
   cursor: pointer;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 6px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
   transition: all 0.2s;
   
   &:hover {
@@ -1356,7 +1368,6 @@ const CloseIconButton = styled.button`
   border: none;
   color: var(--sba-text-muted);
   cursor: pointer;
-  font-size: 0.85rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1371,7 +1382,7 @@ const CloseIconButton = styled.button`
 `;
 
 const TextareaWrapper = styled.div`
-  padding: 16px 20px 20px;
+  padding: 12px 16px 16px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1380,14 +1391,14 @@ const TextareaWrapper = styled.div`
 const StyledTextarea = styled.textarea`
   width: 100%;
   height: 100%;
-  min-height: 180px;
-  padding: 12px;
+  min-height: 190px;
+  padding: 10px;
   background: var(--sba-bg);
   color: var(--sba-text);
   border: 1px solid var(--sba-border-strong);
-  border-radius: 8px;
-  font-size: 0.9rem;
-  line-height: 1.6;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  line-height: 1.5;
   resize: none;
   outline: none;
   font-family: inherit;
@@ -1396,7 +1407,7 @@ const StyledTextarea = styled.textarea`
   
   &:focus {
     border-color: var(--sba-text);
-    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.03);
   }
 `;
 
@@ -1529,19 +1540,23 @@ function NoteEditor({ targetDate, session, passage, verses }) {
 
       <DrawerContainer $isExpanded={isExpanded} onClick={!isExpanded ? () => setIsExpanded(true) : undefined}>
         {!isExpanded ? (
-          <CompactHandle>▲</CompactHandle>
+          <CompactHandle>
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 5l4-4 4 4"/>
+            </svg>
+          </CompactHandle>
         ) : (
           <>
             <div 
               onClick={() => setIsExpanded(false)}
               style={{
                 width: '100%',
-                height: '12px',
+                height: '10px',
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
                 cursor: 'pointer',
-                paddingTop: '6px'
+                paddingTop: '4px'
               }}
             >
               <div style={{
@@ -1565,7 +1580,9 @@ function NoteEditor({ targetDate, session, passage, verses }) {
                   </CardButton>
                 )}
                 <CloseIconButton onClick={() => setIsExpanded(false)}>
-                  ▼
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 1l4 4 4-4"/>
+                  </svg>
                 </CloseIconButton>
               </div>
             </DrawerHeader>
@@ -2040,27 +2057,30 @@ function TabBookmarks({ onNavigateToVerse, updateTrigger }) {
 const SharingCard = styled.div`
   background: var(--sba-card-bg);
   border: 1px solid var(--sba-border-strong);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   margin-bottom: 20px;
 `;
 
 const SharingTitle = styled.h3`
   margin: 0 0 16px 0;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--sba-text);
+  letter-spacing: -0.01em;
 `;
 
 const GuestNotice = styled.div`
   background: var(--sba-card-sub-bg);
-  border: 1px dashed var(--sba-border-strong);
+  border: 1px solid var(--sba-border-strong);
   border-radius: 8px;
-  padding: 24px;
+  padding: 20px;
   text-align: center;
   cursor: pointer;
   color: var(--sba-text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
   transition: all 0.2s;
   
   &:hover {
@@ -2071,12 +2091,12 @@ const GuestNotice = styled.div`
 
 const StyledInput = styled.input`
   width: 100%;
-  padding: 10px 14px;
+  padding: 8px 12px;
   background: var(--sba-bg);
   color: var(--sba-text);
   border: 1px solid var(--sba-border-strong);
-  border-radius: 8px;
-  font-size: 0.9rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
   outline: none;
   transition: all 0.2s;
   
@@ -2090,13 +2110,17 @@ const OutlinedButton = styled.button`
   background: transparent;
   border: 1px solid var(--sba-border-strong);
   color: var(--sba-text);
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   
   &:hover {
     background: var(--sba-card-sub-bg);
@@ -2108,13 +2132,16 @@ const SolidButton = styled.button`
   background: var(--sba-text);
   color: var(--sba-bg);
   border: 1px solid var(--sba-text);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 10px 16px;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   
   &:hover {
     opacity: 0.9;
@@ -2129,9 +2156,9 @@ const SolidButton = styled.button`
 const FeedCard = styled.div`
   background: var(--sba-card-bg);
   border: 1px solid var(--sba-border-strong);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 18px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2153,7 +2180,7 @@ const AuthorInfo = styled.div`
 
 const AuthorName = styled.span`
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   color: var(--sba-text);
 `;
 
@@ -2166,14 +2193,14 @@ const PassageBadge = styled.span`
   font-size: 0.75rem;
   background: var(--sba-card-sub-bg);
   color: var(--sba-text-secondary);
-  padding: 2px 10px;
-  border-radius: 9999px;
-  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
   border: 1px solid var(--sba-border-strong);
 `;
 
 const FeedContent = styled.div`
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   line-height: 1.6;
   color: var(--sba-text);
   white-space: pre-wrap;
@@ -2206,7 +2233,7 @@ const ActionButton = styled.button`
 `;
 
 const CommentSection = styled.div`
-  border-top: 1px solid var(--sba-border);
+  border-top: 1px solid var(--sba-border-strong);
   margin-top: 8px;
   padding-top: 12px;
   display: flex;
@@ -2216,10 +2243,10 @@ const CommentSection = styled.div`
 
 const CommentBox = styled.div`
   background: var(--sba-card-sub-bg);
-  padding: 10px 14px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
   font-size: 0.85rem;
-  border: 1px solid var(--sba-border);
+  border: 1px solid var(--sba-border-strong);
 `;
 
 const CommentHeader = styled.div`
@@ -2230,6 +2257,7 @@ const CommentHeader = styled.div`
 
 const CommentAuthor = styled.span`
   font-weight: 600;
+  font-size: 0.8rem;
   color: var(--sba-text);
 `;
 
@@ -2242,7 +2270,7 @@ const CommentTime = styled.span`
 const CommentContent = styled.div`
   color: var(--sba-text-secondary);
   white-space: pre-wrap;
-  line-height: 1.4;
+  line-height: 1.45;
 `;
 
 function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
@@ -2666,60 +2694,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
                   </CommentSection>
                 )}
               </FeedCard>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}-KR', { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                              {showCommentDelete && (
-                                <button 
-                                  onClick={() => handleDeleteComment(c.id, r.id)}
-                                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: 0 }}
-                                >
-                                  ❌
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          <div style={{ color: 'var(--sba-text)', whiteSpace: 'pre-wrap' }}>{c.content}</div>
-                        </div>
-                      );
-                    })}
-
-                    {/* 댓글 쓰기 */}
-                    {!session ? (
-                      <div 
-                        onClick={onOpenAuthModal}
-                        style={{ fontSize: '0.8rem', textAlign: 'center', color: 'var(--sba-primary)', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
-                      >
-                        댓글 작성을 위해 로그인해 주세요.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                        <input 
-                          type="text" 
-                          className="sba-input"
-                          style={{ flex: 1, margin: 0, fontSize: '0.85rem', padding: '6px 12px' }}
-                          placeholder="댓글을 입력해 주세요..."
-                          value={newCommentText[r.id] || ''}
-                          onChange={e => setNewCommentText(prev => ({ ...prev, [r.id]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === 'Enter') handleSubmitComment(r.id); }}
-                        />
-                        <button 
-                          className="sba-btn" 
-                          style={{ marginTop: 0, fontSize: '0.8rem', padding: '0 12px' }}
-                          onClick={() => handleSubmitComment(r.id)}
-                        >
-                          등록
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
             );
           })}
         </div>
@@ -3815,9 +3789,10 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
             {isSplashVisible && (
                 <div className={`sba-splash-screen ${isSplashFading ? 'fade-out' : ''}`}>
                     <div className="sba-splash-content">
-                        <div className="sba-splash-main-title">서울북부교회</div>
-                        <div className="sba-splash-sub-title">QT & 통독</div>
-                        <div className="sba-splash-desc">말씀으로 하루를 여는 은혜의 시간</div>
+                        <div className="sba-splash-logo">⛪</div>
+                        <h1 className="sba-splash-main-title">서울북부교회</h1>
+                        <h2 className="sba-splash-sub-title">QT & 통독</h2>
+                        <p className="sba-splash-desc">말씀으로 하루를 여는 은혜의 시간</p>
                     </div>
                     <div className="sba-splash-footer">
                         개발: 이소원 형제
