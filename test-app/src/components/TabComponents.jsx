@@ -53,12 +53,34 @@ const CompactHandle = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-  color: var(--sba-text-secondary);
+  background: var(--sba-card-sub-bg);
+  border-bottom: 1px solid var(--sba-border-strong);
+  color: var(--sba-text-subtle);
   user-select: none;
-  transition: color 0.2s;
+  transition: all 0.2s;
   
   &:hover {
-    color: var(--sba-text);
+    color: var(--sba-text-muted);
+    background: var(--sba-border-strong);
+  }
+`;
+
+const ExpandedHandle = styled.div`
+  width: 100%;
+  height: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--sba-card-sub-bg);
+  border-bottom: 1px solid var(--sba-border-strong);
+  color: var(--sba-text-subtle);
+  user-select: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    color: var(--sba-text-muted);
+    background: var(--sba-border-strong);
   }
 `;
 
@@ -66,7 +88,7 @@ const DrawerHeader = styled.div`
   display: flex; 
   justify-content: space-between; 
   align-items: center; 
-  padding: 6px 16px 8px;
+  padding: 8px 16px 8px;
   border-bottom: 1px solid var(--sba-border-strong);
 `;
 
@@ -107,24 +129,6 @@ const CardButton = styled.button`
   &:hover {
     background: var(--sba-card-sub-bg);
     border-color: var(--sba-text-muted);
-  }
-`;
-
-const CloseIconButton = styled.button`
-  background: none;
-  border: none;
-  color: var(--sba-text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  border-radius: 4px;
-  transition: all 0.2s;
-  
-  &:hover {
-    color: var(--sba-text);
-    background: var(--sba-card-sub-bg);
   }
 `;
 
@@ -294,25 +298,11 @@ function NoteEditor({ targetDate, session, passage, verses }) {
           </CompactHandle>
         ) : (
           <>
-            <div 
-              onClick={() => setIsExpanded(false)}
-              style={{
-                width: '100%',
-                height: '10px',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                cursor: 'pointer',
-                paddingTop: '4px'
-              }}
-            >
-              <div style={{
-                width: '32px',
-                height: '4px',
-                borderRadius: '2px',
-                background: 'var(--sba-border-strong)'
-              }} />
-            </div>
+            <ExpandedHandle onClick={() => setIsExpanded(false)}>
+              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 1l4 4 4-4"/>
+              </svg>
+            </ExpandedHandle>
 
             <DrawerHeader>
               <HeaderTitle>
@@ -326,11 +316,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
                     🎨 말씀 카드
                   </CardButton>
                 )}
-                <CloseIconButton onClick={() => setIsExpanded(false)}>
-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 1l4 4 4-4"/>
-                  </svg>
-                </CloseIconButton>
               </div>
             </DrawerHeader>
 
