@@ -179,10 +179,9 @@ const StyledTextarea = styled.textarea`
   }
 `;
 
-function NoteEditor({ targetDate, session, passage, verses }) {
+function NoteEditor({ targetDate, session }) {
   const [content, setContent] = useState('');
   const [saveStatus, setSaveStatus] = useState('저장 완료');
-  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const timerRef = useRef(null);
   const isDirtyRef = useRef(false);
@@ -328,14 +327,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
                 오늘의 메모
                 <StatusBadge>{saveStatus}</StatusBadge>
               </HeaderTitle>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {verses && (
-                  <CardButton onClick={() => setIsImageModalOpen(true)}>
-                    🎨 말씀 카드
-                  </CardButton>
-                )}
-              </div>
             </DrawerHeader>
 
             <TextareaWrapper>
@@ -349,13 +340,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
           </>
         )}
       </DrawerContainer>
-
-      <ImageCardModal 
-        isOpen={isImageModalOpen} 
-        onClose={() => setIsImageModalOpen(false)} 
-        passage={passage} 
-        verses={verses} 
-      />
     </>
   );
 }
@@ -636,8 +620,6 @@ export function TabToday({ todayPlan, session, addToast, onBookmarkChange }) {
       <NoteEditor 
         targetDate={todayPlan.dateObj} 
         session={session} 
-        passage={`${SHORT_TO_FULL[abbrev] || abbrev} ${verse}장`} 
-        verses={verses} 
       />
     </div>
   );
@@ -746,8 +728,6 @@ export function TabReading({ todayPlan, session, addToast, onBookmarkChange }) {
       <NoteEditor 
         targetDate={todayPlan.dateObj} 
         session={session} 
-        passage={todayPlan.new ? `${todayPlan.new.books.map(b => SHORT_TO_FULL[b] || b).join(', ')} ${todayPlan.new.verseRaw}장` : '통독 말씀'} 
-        verses={blocks.length > 0 ? blocks[0].verses : null} 
       />
     </div>
   );
@@ -812,7 +792,7 @@ const BookmarkSearchWrapper = styled.div`
   width: 100%;
 `;
 
-function BookmarkDetailModal({ bookmark, onClose, onSaveMemo, onDelete, onGoToVerse, addToast }) {
+function BookmarkDetailModal({ bookmark, onClose, onSaveMemo, onDelete, onGoToVerse, onMakeCard, addToast }) {
   const [memoText, setMemoText] = useState(bookmark.memo || '');
 
   const handleImportTodayMemo = () => {
@@ -859,6 +839,31 @@ function BookmarkDetailModal({ bookmark, onClose, onSaveMemo, onDelete, onGoToVe
           ))}
         </DetailVerseContainer>
 
+        <div style={{ marginBottom: '16px' }}>
+          <button 
+            style={{ 
+              width: '100%', 
+              padding: '10px', 
+              borderRadius: '8px', 
+              cursor: 'pointer', 
+              border: '1px solid var(--sba-border-strong)', 
+              background: 'var(--sba-card-sub-bg)', 
+              color: 'var(--sba-text)', 
+              fontWeight: '600', 
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              transition: 'all 0.2s'
+            }}
+            onClick={() => onMakeCard(bookmark)}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            말씀 카드 제작
+          </button>
+        </div>
+
         <div style={{ textAlign: 'left', marginBottom: '16px' }}>
           <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', fontWeight: '600', color: 'var(--sba-text-secondary)', marginBottom: '6px' }}>
             <span>북마크 메모</span>
@@ -902,11 +907,47 @@ function BookmarkDetailModal({ bookmark, onClose, onSaveMemo, onDelete, onGoToVe
   );
 }
 
-export function TabBookmarks({ onNavigateToVerse, updateTrigger, addToast }) {
+const RecordToggleContainer = styled.div`
+  display: flex;
+  background: var(--sba-card-sub-bg, #f3f4f6);
+  padding: 4px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid var(--sba-border-strong, #e5e7eb);
+`;
+
+const RecordToggleButton = styled.button`
+  flex: 1;
+  background: ${props => props.$active ? 'var(--sba-card-bg, #ffffff)' : 'transparent'};
+  color: ${props => props.$active ? 'var(--sba-text, #111827)' : 'var(--sba-text-secondary, #4b5563)'};
+  border: none;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: ${props => props.$active ? '600' : '500'};
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: ${props => props.$active ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'};
+  
+  &:hover {
+    color: var(--sba-text);
+  }
+`;
+
+export function TabBookmarks({ session, onOpenAuthModal, onNavigateToVerse, updateTrigger, addToast }) {
+  const [subTab, setSubTab] = useState('bookmarks'); // 'bookmarks' or 'sharings'
   const [bookmarks, setBookmarks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBookmark, setSelectedBookmark] = useState(null);
+
+  // 나의 나눔 데이터
+  const [myReflections, setMyReflections] = useState([]);
+  const [loadingReflections, setLoadingReflections] = useState(false);
+
+  // 말씀 카드 관련 상태
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  const [activeCardBookmark, setActiveCardBookmark] = useState(null);
 
   const loadBookmarks = async () => {
     setLoading(true);
@@ -953,9 +994,35 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger, addToast }) {
     setLoading(false);
   };
 
+  const loadMyReflections = async () => {
+    if (!session) return;
+    setLoadingReflections(true);
+    try {
+      const { data, error } = await supabase
+        .from('qt_shared_reflections')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setMyReflections(data || []);
+    } catch (err) {
+      console.error(err);
+      if (addToast) addToast('내 나눔 기록을 불러오지 못했습니다.');
+    } finally {
+      setLoadingReflections(false);
+    }
+  };
+
   useEffect(() => {
     loadBookmarks();
   }, [updateTrigger]);
+
+  useEffect(() => {
+    if (subTab === 'sharings' && session) {
+      loadMyReflections();
+    }
+  }, [subTab, session]);
 
   const handleDelete = async (b) => {
     if (!window.confirm('정말 북마크를 삭제하시겠습니까?')) return;
@@ -978,17 +1045,34 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger, addToast }) {
       setSelectedBookmark(null);
       if (addToast) addToast('북마크가 삭제되었습니다.');
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
+      const { data: { session: activeSession } } = await supabase.auth.getSession();
+      if (activeSession) {
         await supabase
           .from('qt_bookmarks')
           .delete()
-          .eq('user_id', session.user.id)
+          .eq('user_id', activeSession.user.id)
           .eq('book', b.book)
           .eq('chapter', b.chapter)
           .eq('verse', b.verse)
           .eq('verses', b.verses || null);
       }
+    }
+  };
+
+  const handleDeleteReflection = async (id) => {
+    if (!confirm('정말로 이 나눔 기록을 삭제하시겠습니까?')) return;
+    try {
+      const { error } = await supabase
+        .from('qt_shared_reflections')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      if (addToast) addToast('나눔 기록이 삭제되었습니다.');
+      setMyReflections(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert('삭제 실패: ' + err.message);
     }
   };
 
@@ -1010,12 +1094,12 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger, addToast }) {
       localBookmarks[index].memo = newMemo;
       localStorage.setItem('sba_qt_bookmarks', JSON.stringify(localBookmarks));
       
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
+      const { data: { session: activeSession } } = await supabase.auth.getSession();
+      if (activeSession) {
         await supabase
           .from('qt_bookmarks')
           .update({ memo: newMemo })
-          .eq('user_id', session.user.id)
+          .eq('user_id', activeSession.user.id)
           .eq('book', selectedBookmark.book)
           .eq('chapter', selectedBookmark.chapter)
           .eq('verse', selectedBookmark.verse)
@@ -1025,6 +1109,36 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger, addToast }) {
       loadBookmarks();
       setSelectedBookmark(null);
     }
+  };
+
+  const handleMakeCard = (b) => {
+    const versesObj = {};
+    if (b.verseTextList) {
+      b.verseTextList.forEach(item => {
+        versesObj[item.vNum] = item.text;
+      });
+    }
+    const fullName = SHORT_TO_FULL[b.book] || b.book;
+    let rangeStr = `${b.verse}`;
+    if (b.verses && b.verses.includes(',')) {
+      const list = b.verses.split(',');
+      rangeStr = `${list[0]}~${list[list.length - 1]}`;
+    }
+    setActiveCardBookmark({
+      passage: `${fullName} ${b.chapter}:${rangeStr}`,
+      verses: versesObj
+    });
+    setCardModalOpen(true);
+  };
+
+  const formatDateTime = (isoString) => {
+    const d = new Date(isoString);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}.${month}.${day} ${hours}:${minutes}`;
   };
 
   const filteredBookmarks = bookmarks.filter(b => {
@@ -1038,59 +1152,141 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger, addToast }) {
     );
   });
 
-  if (loading) return <div className="sba-loading">북마크 리스트를 로드 중...</div>;
-
   return (
     <div className="sba-tab-content">
-      <h2 className="sba-verse-title" style={{ borderLeft: 'none', marginBottom: '16px' }}>내 북마크</h2>
-      
-      <BookmarkSearchWrapper>
-        <StyledInput 
-          type="text" 
-          placeholder="성경 구절명, 말씀 텍스트, 메모 검색..." 
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-        />
-      </BookmarkSearchWrapper>
+      <RecordToggleContainer>
+        <RecordToggleButton 
+          $active={subTab === 'bookmarks'} 
+          onClick={() => setSubTab('bookmarks')}
+        >
+          내 북마크
+        </RecordToggleButton>
+        <RecordToggleButton 
+          $active={subTab === 'sharings'} 
+          onClick={() => setSubTab('sharings')}
+        >
+          나눔 기록
+        </RecordToggleButton>
+      </RecordToggleContainer>
 
-      {filteredBookmarks.length === 0 ? (
-        <div className="sba-empty-state">
-          {searchQuery ? '검색 결과가 없습니다.' : '저장된 북마크가 없습니다. 말씀 본문에서 구절을 터치하여 북마크로 추가해 보세요.'}
-        </div>
+      {subTab === 'bookmarks' ? (
+        <>
+          <BookmarkSearchWrapper>
+            <StyledInput 
+              type="text" 
+              placeholder="성경 구절명, 말씀 텍스트, 메모 검색..." 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </BookmarkSearchWrapper>
+
+          {loading ? (
+            <div className="sba-loading">북마크 리스트를 로드 중...</div>
+          ) : filteredBookmarks.length === 0 ? (
+            <div className="sba-empty-state">
+              {searchQuery ? '검색 결과가 없습니다.' : '저장된 북마크가 없습니다. 말씀 본문에서 구절을 터치하여 북마크로 추가해 보세요.'}
+            </div>
+          ) : (
+            <div className="sba-bookmark-list">
+              {filteredBookmarks.map((b, idx) => {
+                const fullName = SHORT_TO_FULL[b.book] || b.book;
+                let rangeStr = `${b.verse}`;
+                if (b.verses && b.verses.includes(',')) {
+                  const list = b.verses.split(',');
+                  rangeStr = `${list[0]}~${list[list.length - 1]}`;
+                }
+
+                return (
+                  <div 
+                    key={`${b.book}-${b.chapter}-${b.verse}-${idx}`}
+                    className="sba-bookmark-item"
+                    onClick={() => setSelectedBookmark(b)}
+                  >
+                    <div className="sba-bookmark-info">
+                      <span className="sba-bookmark-name">{fullName} {b.chapter}장 {rangeStr}절</span>
+                      <span className="sba-bookmark-snippet">{b.text}</span>
+                      {b.memo && <span className="sba-bookmark-snippet" style={{ color: 'var(--sba-text-secondary)', fontStyle: 'italic', marginTop: '4px', borderLeft: '2px solid var(--sba-border-strong)', paddingLeft: '6px' }}>[메모] {b.memo}</span>}
+                    </div>
+                    <button 
+                      className="sba-bookmark-delete-btn" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(b);
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       ) : (
-        <div className="sba-bookmark-list">
-          {filteredBookmarks.map((b, idx) => {
-            const fullName = SHORT_TO_FULL[b.book] || b.book;
-            let rangeStr = `${b.verse}`;
-            if (b.verses && b.verses.includes(',')) {
-              const list = b.verses.split(',');
-              rangeStr = `${list[0]}~${list[list.length - 1]}`;
-            }
-
-            return (
+        // 나눔 기록
+        !session ? (
+          <GuestNotice onClick={onOpenAuthModal} style={{ marginTop: '10px' }}>
+            나눔 기록은 로그인이 필요한 기능입니다.<br />
+            <span style={{ fontSize: '0.8rem', color: 'var(--sba-primary)', fontWeight: 'bold', textDecoration: 'underline' }}>
+              소셜 로그인으로 1초 만에 로그인하기
+            </span>
+          </GuestNotice>
+        ) : loadingReflections ? (
+          <div className="sba-loading">내 나눔 기록을 불러오는 중...</div>
+        ) : myReflections.length === 0 ? (
+          <div className="sba-empty-state">아직 공유한 묵상 나눔 기록이 없습니다. 나눔 탭에서 오늘의 묵상을 지체들과 나누어 보세요!</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {myReflections.map(r => (
               <div 
-                key={`${b.book}-${b.chapter}-${b.verse}-${idx}`}
-                className="sba-bookmark-item"
-                onClick={() => setSelectedBookmark(b)}
+                key={r.id} 
+                style={{
+                  background: 'var(--sba-card-bg)',
+                  border: '1px solid var(--sba-border-strong)',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  textAlign: 'left',
+                  position: 'relative'
+                }}
               >
-                <div className="sba-bookmark-info">
-                  <span className="sba-bookmark-name">{fullName} {b.chapter}장 {rangeStr}절</span>
-                  <span className="sba-bookmark-snippet">{b.text}</span>
-                  {b.memo && <span className="sba-bookmark-snippet" style={{ color: 'var(--sba-text-secondary)', fontStyle: 'italic', marginTop: '4px', borderLeft: '2px solid var(--sba-border-strong)', paddingLeft: '6px' }}>📝 {b.memo}</span>}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--sba-text-secondary)', fontWeight: 'bold' }}>
+                    {r.passage}
+                  </span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-muted)' }}>
+                    {formatDateTime(r.created_at)}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--sba-text)', whiteSpace: 'pre-wrap', lineHeight: '1.5', paddingRight: '24px' }}>
+                  {r.content}
                 </div>
                 <button 
-                  className="sba-bookmark-delete-btn" 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(b);
+                  onClick={() => handleDeleteReflection(r.id)}
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    bottom: '12px',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--sba-text-secondary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '4px'
                   }}
+                  title="삭제"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                  </svg>
                 </button>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )
       )}
 
       {selectedBookmark && (
@@ -1100,7 +1296,20 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger, addToast }) {
           onSaveMemo={handleSaveMemo}
           onDelete={() => handleDelete(selectedBookmark)}
           onGoToVerse={onNavigateToVerse}
+          onMakeCard={handleMakeCard}
           addToast={addToast}
+        />
+      )}
+
+      {cardModalOpen && activeCardBookmark && (
+        <ImageCardModal
+          isOpen={cardModalOpen}
+          onClose={() => {
+            setCardModalOpen(false);
+            setActiveCardBookmark(null);
+          }}
+          passage={activeCardBookmark.passage}
+          verses={activeCardBookmark.verses}
         />
       )}
     </div>
@@ -1167,8 +1376,8 @@ const OutlinedButton = styled.button`
   border: 1px solid var(--sba-border-strong);
   color: var(--sba-text);
   border-radius: 6px;
-  padding: 8px 16px;
-  font-size: 0.875rem;
+  padding: 4px 8px;
+  font-size: 0.75rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -1176,7 +1385,7 @@ const OutlinedButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   
   &:hover {
     background: var(--sba-card-sub-bg);
@@ -1428,7 +1637,7 @@ function BookmarkSelectModal({ isOpen, onClose, onSelect, addToast }) {
                   </div>
                   {b.memo && (
                     <div style={{ fontSize: '0.75rem', color: 'var(--sba-text-muted)', marginTop: '4px', fontStyle: 'italic' }}>
-                      📝 {b.memo}
+                      [메모] {b.memo}
                     </div>
                   )}
                 </div>
@@ -1716,7 +1925,7 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
         
         {!session ? (
           <GuestNotice onClick={onOpenAuthModal}>
-            🔒 묵상 나눔은 로그인이 필요한 기능입니다.<br />
+            묵상 나눔은 로그인이 필요한 기능입니다.<br />
             <span style={{ fontSize: '0.8rem', color: 'var(--sba-primary)', fontWeight: 'bold', textDecoration: 'underline' }}>
               소셜 로그인으로 1초 만에 로그인하기
             </span>
@@ -1735,13 +1944,13 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
                 type="button" 
                 onClick={() => setIsBookmarkSelectOpen(true)}
               >
-                🔖 북마크에서 선택
+                북마크에서 선택
               </OutlinedButton>
               <OutlinedButton 
                 type="button" 
                 onClick={handleImportMemo}
               >
-                ✏️ 내 메모 긁어오기
+                내 메모 긁어오기
               </OutlinedButton>
             </div>
             
@@ -1800,10 +2009,10 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
                     {showDelete && (
                       <button 
                         onClick={() => handleDeleteReflection(r.id)}
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', padding: '2px', display: 'flex', alignItems: 'center' }}
+                        style={{ background: 'none', border: 'none', color: 'var(--sba-text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
                         title="삭제"
                       >
-                        🗑️
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                       </button>
                     )}
                   </div>
@@ -1817,14 +2026,14 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
                     onClick={() => handleToggleLike(r.id)}
                     $active={hasLiked}
                   >
-                    <span>{hasLiked ? '❤️' : '🤍'}</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill={hasLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
                     <span>{likeCount}</span>
                   </ActionButton>
                   
                   <ActionButton 
                     onClick={() => setActiveCommentId(activeCommentId === r.id ? null : r.id)}
                   >
-                    <span>💬</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                     <span>{refComments.length}</span>
                   </ActionButton>
                 </ActionSection>
@@ -1847,9 +2056,10 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
                               {showCommentDelete && (
                                 <button 
                                   onClick={() => handleDeleteComment(c.id, r.id)}
-                                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: 0 }}
+                                  style={{ background: 'none', border: 'none', color: 'var(--sba-text-secondary)', cursor: 'pointer', fontSize: '0.75rem', padding: 0, display: 'flex', alignItems: 'center' }}
+                                  title="댓글 삭제"
                                 >
-                                  ❌
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                                 </button>
                               )}
                             </div>
@@ -1899,94 +2109,166 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
 // ==========================================
 // 7. ImageCardModal (말씀 이미지 카드 생성 및 다운로드 모달)
 // ==========================================
+// ==========================================
+// 7. ImageCardModal (말씀 이미지 카드 생성 및 공유/다운로드 모달)
+// ==========================================
 export function ImageCardModal({ isOpen, onClose, passage, verses }) {
-  const [activeTheme, setActiveTheme] = useState('sunset'); // sunset, ocean, forest, charcoal, ivory
+  const [activeTheme, setActiveTheme] = useState('hanji');
   const cardRef = useRef(null);
   
   if (!isOpen) return null;
 
-  // 대표 구절 하나 혹은 처음 2개 구절만 요약해서 띄우기
+  // 모든 선택된 구절을 가져와서 렌더링 텍스트 구성
   let verseText = "말씀 데이터를 불러올 수 없습니다.";
   if (verses) {
     const verseList = Object.entries(verses);
     if (verseList.length > 0) {
-      verseText = verseList.slice(0, 2).map(([num, text]) => `${num}. ${text}`).join(' ');
-      if (verseList.length > 2) {
-        verseText += " ...";
-      }
+      // 모든 구절을 모아서 띄우기
+      verseText = verseList.map(([num, text]) => `${num}절 ${text}`).join(' ');
     }
   }
 
+  // 종이 질감 테마 정의
   const themes = {
-    sunset: {
-      background: 'linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6)',
-      textColor: '#ffffff',
-      metaColor: 'rgba(255, 255, 255, 0.85)',
-      cardBg: 'rgba(0, 0, 0, 0.25)',
-      borderColor: 'rgba(255, 255, 255, 0.15)'
+    hanji: {
+      name: '한지',
+      bgColor: '#FAF8F5',
+      textColor: '#2C2A29',
+      metaColor: '#78716C',
+      borderColor: '#D4CFC9',
+      noiseOpacity: 0.08
     },
-    ocean: {
-      background: 'linear-gradient(135deg, #06b6d4, #3b82f6, #1e3a8a)',
-      textColor: '#ffffff',
-      metaColor: 'rgba(255, 255, 255, 0.85)',
-      cardBg: 'rgba(0, 0, 0, 0.25)',
-      borderColor: 'rgba(255, 255, 255, 0.15)'
+    parchment: {
+      name: '양피지',
+      bgColor: '#F4EFE6',
+      textColor: '#3D332D',
+      metaColor: '#8C7E6C',
+      borderColor: '#C8BCA6',
+      noiseOpacity: 0.12
     },
-    forest: {
-      background: 'linear-gradient(135deg, #10b981, #064e3b, #022c22)',
-      textColor: '#ffffff',
-      metaColor: 'rgba(255, 255, 255, 0.85)',
-      cardBg: 'rgba(0, 0, 0, 0.25)',
-      borderColor: 'rgba(255, 255, 255, 0.15)'
+    craft: {
+      name: '크래프트',
+      bgColor: '#E5D3B3',
+      textColor: '#4A3B32',
+      metaColor: '#7D6A5A',
+      borderColor: '#BBA888',
+      noiseOpacity: 0.15
     },
-    charcoal: {
-      background: 'linear-gradient(135deg, #1f2937, #111827, #030712)',
-      textColor: '#f3f4f6',
-      metaColor: '#9ca3af',
-      cardBg: 'rgba(255, 255, 255, 0.03)',
-      borderColor: 'rgba(255, 255, 255, 0.08)'
-    },
-    ivory: {
-      background: 'linear-gradient(135deg, #fafaf9, #f5f5f4, #e7e5e4)',
-      textColor: '#1c1917',
-      metaColor: '#78716c',
-      cardBg: 'rgba(255, 255, 255, 0.6)',
-      borderColor: 'rgba(0, 0, 0, 0.05)'
+    canvas: {
+      name: '캔버스',
+      bgColor: '#EAE8E4',
+      textColor: '#2E3033',
+      metaColor: '#6B6F73',
+      borderColor: '#C5C2BD',
+      noiseOpacity: 0.10
     }
   };
 
-  const currentTheme = themes[activeTheme];
+  const currentTheme = themes[activeTheme] || themes.hanji;
 
+  // 글자 수에 비례하여 동적으로 폰트 크기 계산 (안 잘리고 다 들어가도록 자동 조절)
+  const getFontSize = (text) => {
+    const len = text.length;
+    if (len < 50) return '1.35rem';
+    if (len < 100) return '1.15rem';
+    if (len < 180) return '1.0rem';
+    if (len < 260) return '0.85rem';
+    return '0.75rem';
+  };
+
+  const fontSize = getFontSize(verseText);
+
+  // 일반 다운로드 함수 (Fallback용)
   const handleDownload = async () => {
     if (!cardRef.current) return;
     try {
       const canvas = await html2canvas(cardRef.current, {
         useCORS: true,
-        scale: 2, // 해상도 높이기
+        scale: 2, // 해상도 업 스케일링
       });
       const link = document.createElement('a');
       link.download = `SBA_QT_${passage.replace(/\s+/g, '_')}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
     } catch (e) {
-      console.error(e);
+      console.error('다운로드 중 에러 발생:', e);
       alert('이미지 생성에 실패했습니다.');
     }
   };
 
+  // Web Share API를 사용한 공유 기능 (파일 공유)
+  const handleShare = async () => {
+    if (!cardRef.current) return;
+    try {
+      const canvas = await html2canvas(cardRef.current, {
+        useCORS: true,
+        scale: 2,
+      });
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          handleDownload();
+          return;
+        }
+
+        const file = new File([blob], `SBA_QT_${passage.replace(/\s+/g, '_')}.png`, { type: 'image/png' });
+        
+        // 공유 가능한지 체크
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: '오늘의 말씀 카드',
+              text: `${passage} 말씀`
+            });
+          } catch (shareErr) {
+            // 사용자가 취소한 게 아니라면 다운로드로 폴백
+            if (shareErr.name !== 'AbortError') {
+              console.warn('Web Share API 호출 에러, 이미지 다운로드로 전환:', shareErr);
+              handleDownload();
+            }
+          }
+        } else {
+          // Web Share API 미지원 시 다운로드 실행
+          handleDownload();
+        }
+      }, 'image/png');
+    } catch (e) {
+      console.error('공유 중 에러 발생:', e);
+      handleDownload();
+    }
+  };
+
   return (
-    <div className="sba-modal-overlay" onClick={onClose}>
+    <div className="sba-modal-overlay" onClick={onClose} style={{ zIndex: 130 }}>
+      {/* SVG 노이즈 필터 정의 */}
+      <svg style={{ display: 'none' }}>
+        <filter id="card-paper-noise">
+          <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" stitchTiles="stitch" />
+          <feColorMatrix type="matrix" values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.07 0" />
+          <feComposite operator="in" in2="SourceGraphic" />
+          <feBlend mode="multiply" in="SourceGraphic" in2="noise" />
+        </filter>
+      </svg>
+
       <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '400px', padding: '20px'}}>
-        <h3 style={{marginTop: 0, marginBottom: '16px'}}>말씀 카드 다운로드</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{marginTop: 0, marginBottom: 0, fontSize: '1rem', fontWeight: 'bold'}}>말씀 카드 제작</h3>
+          <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--sba-text-muted)' }} onClick={onClose}>✕</button>
+        </div>
         
         {/* 카드 영역 */}
         <div 
           ref={cardRef} 
           style={{
-            background: currentTheme.background,
-            padding: '40px 30px',
-            borderRadius: '16px',
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
+            backgroundColor: currentTheme.bgColor,
+            backgroundImage: `
+              radial-gradient(circle at 50% 50%, rgba(255,255,255,0.4), rgba(0,0,0,0.01)),
+              url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='${currentTheme.noiseOpacity}'/%3E%3C/svg%3E")
+            `,
+            padding: '36px 28px',
+            borderRadius: '12px',
+            boxShadow: '0 8px 20px rgba(0, 0, 0, 0.12)',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
@@ -1994,56 +2276,83 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
             color: currentTheme.textColor,
             fontFamily: "'Nanum Myeongjo', 'Georgia', serif",
             position: 'relative',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            border: `1px solid ${currentTheme.borderColor}`
           }}
         >
-          <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', opacity: 0.7, color: currentTheme.metaColor }}>
+          {/* 장식용 프레임 라인 */}
+          <div style={{
+            position: 'absolute',
+            top: '12px',
+            left: '12px',
+            right: '12px',
+            bottom: '12px',
+            border: `1px solid ${currentTheme.borderColor}`,
+            opacity: 0.5,
+            pointerEvents: 'none'
+          }} />
+
+          <div style={{ fontSize: '0.75rem', fontWeight: 'bold', letterSpacing: '2px', opacity: 0.6, color: currentTheme.metaColor, textAlign: 'center', zIndex: 1 }}>
             SBA QT
           </div>
           
-          <div style={{ margin: '30px 0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <p style={{ fontSize: '1.25rem', lineHeight: '1.8', margin: 0, fontWeight: '500', wordBreak: 'keep-all', textAlign: 'center' }}>
+          <div style={{ margin: '20px 0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', zIndex: 1 }}>
+            <p style={{ 
+              fontSize: fontSize, 
+              lineHeight: '1.75', 
+              margin: 0, 
+              fontWeight: '500', 
+              wordBreak: 'keep-all', 
+              textAlign: 'center',
+              whiteSpace: 'pre-wrap'
+            }}>
               “ {verseText} ”
             </p>
           </div>
 
-          <div style={{ borderTop: `1px solid ${currentTheme.borderColor}`, paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: currentTheme.textColor }}>
+          <div style={{ borderTop: `1px solid ${currentTheme.borderColor}`, paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1, opacity: 0.9 }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: currentTheme.textColor }}>
               {passage}
             </span>
-            <span style={{ fontSize: '0.75rem', color: currentTheme.metaColor }}>
+            <span style={{ fontSize: '0.7rem', color: currentTheme.metaColor }}>
               서울북부교회 청년회
             </span>
           </div>
         </div>
 
         {/* 테마 셀렉터 */}
-        <div style={{marginTop: '20px', display: 'flex', justifyContent: 'space-around'}}>
-          {Object.keys(themes).map(themeName => (
+        <div style={{marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '16px'}}>
+          {Object.entries(themes).map(([key, t]) => (
             <button 
-              key={themeName}
-              onClick={() => setActiveTheme(themeName)}
+              key={key}
+              onClick={() => setActiveTheme(key)}
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                border: activeTheme === themeName ? '2px solid var(--sba-text)' : '1px solid var(--sba-border)',
-                background: themes[themeName].background,
+                padding: '6px 12px',
+                borderRadius: '20px',
+                border: activeTheme === key ? '2px solid var(--sba-text)' : '1px solid var(--sba-border-strong)',
+                background: t.bgColor,
+                color: t.textColor,
                 cursor: 'pointer',
-                boxShadow: 'inset 0 0 4px rgba(0,0,0,0.2)'
+                fontSize: '0.75rem',
+                fontWeight: '600',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                transition: 'all 0.2s'
               }}
-              title={themeName}
-            />
+            >
+              {t.name}
+            </button>
           ))}
         </div>
 
         {/* 하단 버튼 */}
         <div style={{display: 'flex', gap: '8px', marginTop: '24px'}}>
-          <button className="sba-btn" style={{flex: 1, marginTop: 0}} onClick={handleDownload}>
-            이미지 저장
+          <button className="sba-btn" style={{flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleShare}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            공유
           </button>
-          <button className="sba-btn" style={{flex: 1, marginTop: 0, background: 'var(--sba-card-sub-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border)'}} onClick={onClose}>
-            닫기
+          <button className="sba-btn" style={{flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'var(--sba-card-sub-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border-strong)'}} onClick={handleDownload}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            저장
           </button>
         </div>
       </div>
