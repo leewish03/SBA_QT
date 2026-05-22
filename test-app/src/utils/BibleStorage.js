@@ -1,3 +1,5 @@
+import { KOR_TO_ENG } from './bibleLogic';
+
 class BibleStorage {
   constructor() {
     this.dbName = 'sba_qt_bible_db';
@@ -45,7 +47,15 @@ class BibleStorage {
 
   async getBook(bookAbbrev) {
     await this.initPromise;
-    const abbrev = bookAbbrev.toUpperCase();
+    // 한글 약어인 경우 영어 3글자 코드로 변환
+    let abbrev = bookAbbrev;
+    if (KOR_TO_ENG[bookAbbrev]) {
+      abbrev = KOR_TO_ENG[bookAbbrev];
+    } else if (KOR_TO_ENG[bookAbbrev.toUpperCase()]) {
+      abbrev = KOR_TO_ENG[bookAbbrev.toUpperCase()];
+    } else {
+      abbrev = bookAbbrev.toUpperCase();
+    }
 
     // 1. 메모리 캐시 먼저 조회
     if (this.memoryCache.has(abbrev)) {

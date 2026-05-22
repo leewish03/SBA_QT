@@ -775,9 +775,13 @@ function parseRange(rangeStr) {
 // 3. Supabase & Local Caching Storages
 // ==========================================
 
-const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || process.env?.NEXT_PUBLIC_SUPABASE_URL || 'https://wyqpcldqlyrqbppjdhhp.supabase.co';
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || 
+  (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_SUPABASE_URL : undefined) || 
+  'https://wyqpcldqlyrqbppjdhhp.supabase.co';
 // .env 등 설정이 없을 시 기본 legacy anon API key를 Fallback으로 제공
-const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5cXBjbGRxbHlycWJwcGpkaGhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MTQ3NDcsImV4cCI6MjA5NDM5MDc0N30.pGTyZtJ6uNBT0own2LnfdcY8ykT8Vpd2UW2MYMAHOXI';
+const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || 
+  (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY : undefined) || 
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5cXBjbGRxbHlycWJwcGpkaGhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MTQ3NDcsImV4cCI6MjA5NDM5MDc0N30.pGTyZtJ6uNBT0own2LnfdcY8ykT8Vpd2UW2MYMAHOXI';
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -786,6 +790,22 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true
   }
 });
+const KOR_TO_ENG = {
+    "창": "GEN", "출": "EXO", "레": "LEV", "민": "NUM", "신": "DEU",
+    "수": "JOS", "삿": "JDG", "룻": "RUT", "삼상": "1SA", "삼하": "2SA",
+    "왕상": "1KI", "왕하": "2KI", "대상": "1CH", "대하": "2CH", "스": "EZR",
+    "느": "NEH", "에": "EST", "욥": "JOB", "시": "PSA", "잠": "PRO",
+    "전": "ECC", "아": "SNG", "사": "ISA", "렘": "JER", "애": "LAM",
+    "겔": "EZK", "단": "DAN", "호": "HOS", "욜": "JOL", "암": "AMO",
+    "옵": "OBA", "욘": "JON", "미": "MIC", "나": "NAM", "합": "HAB",
+    "습": "ZEP", "학": "HAG", "슥": "ZEC", "말": "MAL", "마": "MAT",
+    "막": "MRK", "눅": "LUK", "요": "JHN", "행": "ACT", "롬": "ROM",
+    "고전": "1CO", "고후": "2CO", "갈": "GAL", "엡": "EPH", "빌": "PHP",
+    "골": "COL", "살전": "1TH", "살후": "2TH", "딤전": "1TI", "딤후": "2TI",
+    "딛": "TIT", "몬": "PHM", "히": "HEB", "약": "JAS", "벧전": "1PE",
+    "벧후": "2PE", "요일": "1JN", "요이": "2JN", "요삼": "3JN", "유": "JUD",
+    "계": "REV"
+};
 
 
 class BibleStorage {
@@ -835,7 +855,15 @@ class BibleStorage {
 
   async getBook(bookAbbrev) {
     await this.initPromise;
-    const abbrev = bookAbbrev.toUpperCase();
+    // 한글 약어인 경우 영어 3글자 코드로 변환
+    let abbrev = bookAbbrev;
+    if (KOR_TO_ENG[bookAbbrev]) {
+      abbrev = KOR_TO_ENG[bookAbbrev];
+    } else if (KOR_TO_ENG[bookAbbrev.toUpperCase()]) {
+      abbrev = KOR_TO_ENG[bookAbbrev.toUpperCase()];
+    } else {
+      abbrev = bookAbbrev.toUpperCase();
+    }
 
     // 1. 메모리 캐시 먼저 조회
     if (this.memoryCache.has(abbrev)) {
