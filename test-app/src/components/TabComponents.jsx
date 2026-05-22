@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { SHORT_TO_FULL, FULL_TO_SHORT } from '../utils/bibleLogic';
 import { bibleStorage } from '../utils/BibleStorage';
 import { supabase } from '../utils/supabaseClient';
+import { ShinyText, SpotlightCard } from './ReactBits';
 
 // ==========================================
 // 1. 메모(QT 노트) 에디터 컴포넌트 스타일 및 컴포넌트
@@ -1197,26 +1198,32 @@ export function TabBookmarks({ session, onOpenAuthModal, onNavigateToVerse, upda
                 }
 
                 return (
-                  <div 
+                  <SpotlightCard
                     key={`${b.book}-${b.chapter}-${b.verse}-${idx}`}
                     className="sba-bookmark-item"
-                    onClick={() => setSelectedBookmark(b)}
+                    style={{ padding: 0, overflow: 'hidden', display: 'block' }}
                   >
-                    <div className="sba-bookmark-info">
-                      <span className="sba-bookmark-name">{fullName} {b.chapter}장 {rangeStr}절</span>
-                      <span className="sba-bookmark-snippet">{b.text}</span>
-                      {b.memo && <span className="sba-bookmark-snippet" style={{ color: 'var(--sba-text-secondary)', fontStyle: 'italic', marginTop: '4px', borderLeft: '2px solid var(--sba-border-strong)', paddingLeft: '6px' }}>[메모] {b.memo}</span>}
-                    </div>
-                    <button 
-                      className="sba-bookmark-delete-btn" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(b);
-                      }}
+                    <div 
+                      onClick={() => setSelectedBookmark(b)}
+                      style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', textAlign: 'left' }}
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                    </button>
-                  </div>
+                      <div className="sba-bookmark-info" style={{ flex: 1 }}>
+                        <span className="sba-bookmark-name">{fullName} {b.chapter}장 {rangeStr}절</span>
+                        <span className="sba-bookmark-snippet">{b.text}</span>
+                        {b.memo && <span className="sba-bookmark-snippet" style={{ color: 'var(--sba-text-secondary)', fontStyle: 'italic', marginTop: '4px', borderLeft: '2px solid var(--sba-border-strong)', paddingLeft: '6px' }}>[메모] {b.memo}</span>}
+                      </div>
+                      <button 
+                        className="sba-bookmark-delete-btn" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(b);
+                        }}
+                        style={{ marginLeft: '12px', flexShrink: 0 }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                      </button>
+                    </div>
+                  </SpotlightCard>
                 );
               })}
             </div>
@@ -1227,8 +1234,13 @@ export function TabBookmarks({ session, onOpenAuthModal, onNavigateToVerse, upda
         !session ? (
           <GuestNotice onClick={onOpenAuthModal} style={{ marginTop: '10px' }}>
             나눔 기록은 로그인이 필요한 기능입니다.<br />
-            <span style={{ fontSize: '0.8rem', color: 'var(--sba-primary)', fontWeight: 'bold', textDecoration: 'underline' }}>
-              소셜 로그인으로 1초 만에 로그인하기
+            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', textDecoration: 'underline' }}>
+              <ShinyText 
+                text="소셜 로그인으로 1초 만에 로그인하기" 
+                speed="2s" 
+                baseColor="var(--sba-primary-light, #ff8c42)" 
+                shineColor="var(--sba-primary, #ef4444)" 
+              />
             </span>
           </GuestNotice>
         ) : loadingReflections ? (
@@ -1238,52 +1250,59 @@ export function TabBookmarks({ session, onOpenAuthModal, onNavigateToVerse, upda
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {myReflections.map(r => (
-              <div 
-                key={r.id} 
+              <SpotlightCard
+                key={r.id}
                 style={{
                   background: 'var(--sba-card-bg)',
                   border: '1px solid var(--sba-border-strong)',
                   borderRadius: '8px',
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  textAlign: 'left',
-                  position: 'relative'
+                  overflow: 'hidden'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--sba-text-secondary)', fontWeight: 'bold' }}>
-                    {r.passage}
-                  </span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-muted)' }}>
-                    {formatDateTime(r.created_at)}
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--sba-text)', whiteSpace: 'pre-wrap', lineHeight: '1.5', paddingRight: '24px' }}>
-                  {r.content}
-                </div>
-                <button 
-                  onClick={() => handleDeleteReflection(r.id)}
+                <div 
                   style={{
-                    position: 'absolute',
-                    right: '12px',
-                    bottom: '12px',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--sba-text-secondary)',
-                    cursor: 'pointer',
+                    padding: '16px',
                     display: 'flex',
-                    alignItems: 'center',
-                    padding: '4px'
+                    flexDirection: 'column',
+                    gap: '8px',
+                    textAlign: 'left',
+                    position: 'relative'
                   }}
-                  title="삭제"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-                  </svg>
-                </button>
-              </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--sba-text-secondary)', fontWeight: 'bold' }}>
+                      {r.passage}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-muted)' }}>
+                      {formatDateTime(r.created_at)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--sba-text)', whiteSpace: 'pre-wrap', lineHeight: '1.5', paddingRight: '24px' }}>
+                    {r.content}
+                  </div>
+                  <button 
+                    onClick={() => handleDeleteReflection(r.id)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      bottom: '12px',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--sba-text-secondary)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '4px',
+                      zIndex: 3
+                    }}
+                    title="삭제"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                    </svg>
+                  </button>
+                </div>
+              </SpotlightCard>
             ))}
           </div>
         )
@@ -1319,13 +1338,18 @@ export function TabBookmarks({ session, onOpenAuthModal, onNavigateToVerse, upda
 // ==========================================
 // 6. SharingTab (자체 묵상 나눔 피드 및 댓글 피드 + 관리자 삭제 지원) - shadcn/ui 스타일 적용
 // ==========================================
-const SharingCard = styled.div`
+const FeedCard = styled(SpotlightCard)`
   background: var(--sba-card-bg);
   border: 1px solid var(--sba-border-strong);
   border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  margin-bottom: 20px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+`;
+
+const FeedCardInner = styled.div`
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 `;
 
 const SharingTitle = styled.h3`
@@ -1418,16 +1442,7 @@ const SolidButton = styled.button`
   }
 `;
 
-const FeedCard = styled.div`
-  background: var(--sba-card-bg);
-  border: 1px solid var(--sba-border-strong);
-  border-radius: 8px;
-  padding: 18px;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-`;
+
 
 const FeedHeader = styled.div`
   display: flex;
@@ -1926,8 +1941,13 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
         {!session ? (
           <GuestNotice onClick={onOpenAuthModal}>
             묵상 나눔은 로그인이 필요한 기능입니다.<br />
-            <span style={{ fontSize: '0.8rem', color: 'var(--sba-primary)', fontWeight: 'bold', textDecoration: 'underline' }}>
-              소셜 로그인으로 1초 만에 로그인하기
+            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', textDecoration: 'underline' }}>
+              <ShinyText 
+                text="소셜 로그인으로 1초 만에 로그인하기" 
+                speed="2s" 
+                baseColor="var(--sba-primary-light, #ff8c42)" 
+                shineColor="var(--sba-primary, #ef4444)" 
+              />
             </span>
           </GuestNotice>
         ) : (
@@ -1996,107 +2016,109 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
 
             return (
               <FeedCard key={r.id}>
-                <FeedHeader>
-                  <AuthorInfo>
-                    <AuthorName>{r.author_name}</AuthorName>
-                    <PostTime>
-                      {new Date(r.created_at).toLocaleDateString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                    </PostTime>
-                  </AuthorInfo>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <PassageBadge>{r.passage}</PassageBadge>
-                    {showDelete && (
-                      <button 
-                        onClick={() => handleDeleteReflection(r.id)}
-                        style={{ background: 'none', border: 'none', color: 'var(--sba-text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-                        title="삭제"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                      </button>
-                    )}
-                  </div>
-                </FeedHeader>
-
-                <FeedContent>{r.content}</FeedContent>
-
-                {/* 반응 영역 */}
-                <ActionSection>
-                  <ActionButton 
-                    onClick={() => handleToggleLike(r.id)}
-                    $active={hasLiked}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill={hasLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-                    <span>{likeCount}</span>
-                  </ActionButton>
-                  
-                  <ActionButton 
-                    onClick={() => setActiveCommentId(activeCommentId === r.id ? null : r.id)}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    <span>{refComments.length}</span>
-                  </ActionButton>
-                </ActionSection>
-
-                {/* 댓글 아코디언 */}
-                {activeCommentId === r.id && (
-                  <CommentSection>
-                    {refComments.map(c => {
-                      const isMyComment = session?.user?.id === c.user_id;
-                      const showCommentDelete = isMyComment || isAdmin;
-
-                      return (
-                        <CommentBox key={c.id}>
-                          <CommentHeader>
-                            <CommentAuthor>{c.author_name}</CommentAuthor>
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                              <CommentTime>
-                                {new Date(c.created_at).toLocaleDateString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                              </CommentTime>
-                              {showCommentDelete && (
-                                <button 
-                                  onClick={() => handleDeleteComment(c.id, r.id)}
-                                  style={{ background: 'none', border: 'none', color: 'var(--sba-text-secondary)', cursor: 'pointer', fontSize: '0.75rem', padding: 0, display: 'flex', alignItems: 'center' }}
-                                  title="댓글 삭제"
-                                >
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                                </button>
-                              )}
-                            </div>
-                          </CommentHeader>
-                          <CommentContent>{c.content}</CommentContent>
-                        </CommentBox>
-                      );
-                    })}
-
-                    {/* 댓글 쓰기 */}
-                    {!session ? (
-                      <div 
-                        onClick={onOpenAuthModal}
-                        style={{ fontSize: '0.8rem', textAlign: 'center', color: 'var(--sba-primary)', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
-                      >
-                        댓글 작성을 위해 로그인해 주세요.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                        <StyledInput 
-                          type="text" 
-                          style={{ fontSize: '0.85rem', padding: '8px 12px' }}
-                          placeholder="댓글을 입력해 주세요..."
-                          value={newCommentText[r.id] || ''}
-                          onChange={e => setNewCommentText(prev => ({ ...prev, [r.id]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === 'Enter') handleSubmitComment(r.id); }}
-                        />
-                        <OutlinedButton 
-                          style={{ padding: '8px 16px' }}
-                          onClick={() => handleSubmitComment(r.id)}
+                <FeedCardInner>
+                  <FeedHeader>
+                    <AuthorInfo>
+                      <AuthorName>{r.author_name}</AuthorName>
+                      <PostTime>
+                        {new Date(r.created_at).toLocaleDateString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                      </PostTime>
+                    </AuthorInfo>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <PassageBadge>{r.passage}</PassageBadge>
+                      {showDelete && (
+                        <button 
+                          onClick={() => handleDeleteReflection(r.id)}
+                          style={{ background: 'none', border: 'none', color: 'var(--sba-text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px', zIndex: 3 }}
+                          title="삭제"
                         >
-                          등록
-                        </OutlinedButton>
-                      </div>
-                    )}
-                  </CommentSection>
-                )}
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                        </button>
+                      )}
+                    </div>
+                  </FeedHeader>
+
+                  <FeedContent>{r.content}</FeedContent>
+
+                  {/* 반응 영역 */}
+                  <ActionSection>
+                    <ActionButton 
+                      onClick={() => handleToggleLike(r.id)}
+                      $active={hasLiked}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill={hasLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                      <span>{likeCount}</span>
+                    </ActionButton>
+                    
+                    <ActionButton 
+                      onClick={() => setActiveCommentId(activeCommentId === r.id ? null : r.id)}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      <span>{refComments.length}</span>
+                    </ActionButton>
+                  </ActionSection>
+
+                  {/* 댓글 아코디언 */}
+                  {activeCommentId === r.id && (
+                    <CommentSection>
+                      {refComments.map(c => {
+                        const isMyComment = session?.user?.id === c.user_id;
+                        const showCommentDelete = isMyComment || isAdmin;
+
+                        return (
+                          <CommentBox key={c.id}>
+                            <CommentHeader>
+                              <CommentAuthor>{c.author_name}</CommentAuthor>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <CommentTime>
+                                  {new Date(c.created_at).toLocaleDateString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                                </CommentTime>
+                                {showCommentDelete && (
+                                  <button 
+                                    onClick={() => handleDeleteComment(c.id, r.id)}
+                                    style={{ background: 'none', border: 'none', color: 'var(--sba-text-secondary)', cursor: 'pointer', fontSize: '0.75rem', padding: 0, display: 'flex', alignItems: 'center' }}
+                                    title="댓글 삭제"
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                  </button>
+                                )}
+                              </div>
+                            </CommentHeader>
+                            <CommentContent>{c.content}</CommentContent>
+                          </CommentBox>
+                        );
+                      })}
+
+                      {/* 댓글 쓰기 */}
+                      {!session ? (
+                        <div 
+                          onClick={onOpenAuthModal}
+                          style={{ fontSize: '0.8rem', textAlign: 'center', color: 'var(--sba-primary)', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
+                        >
+                          댓글 작성을 위해 로그인해 주세요.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                          <StyledInput 
+                            type="text" 
+                            style={{ fontSize: '0.85rem', padding: '8px 12px' }}
+                            placeholder="댓글을 입력해 주세요..."
+                            value={newCommentText[r.id] || ''}
+                            onChange={e => setNewCommentText(prev => ({ ...prev, [r.id]: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSubmitComment(r.id); }}
+                          />
+                          <OutlinedButton 
+                            style={{ padding: '8px 16px' }}
+                            onClick={() => handleSubmitComment(r.id)}
+                          >
+                            등록
+                          </OutlinedButton>
+                        </div>
+                      )}
+                    </CommentSection>
+                  )}
+                </FeedCardInner>
               </FeedCard>
             );
           })}

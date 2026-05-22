@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { calcQtDays, getEffectiveDate, SHORT_TO_FULL } from '../utils/bibleLogic';
 import { supabase } from '../utils/supabaseClient';
+import { SpotlightCard } from './ReactBits';
 
 // ==========================================
 // 0. Animations & Common Modal Components (shadcn/ui Style)
@@ -188,7 +189,7 @@ export function TabWeekly({ dailyPlans, currentDate, onCardClick }) {
                     const hasNote = savedNoteDates.has(dateStr);
                     
                     return (
-                        <div 
+                        <SpotlightCard 
                             key={dKey} 
                             className={`sba-weekly-card ${isSelected ? 'today' : ''}`}
                             onClick={() => onCardClick(plan.dateObj)}
@@ -211,7 +212,7 @@ export function TabWeekly({ dailyPlans, currentDate, onCardClick }) {
                                     <span style={{ fontSize: '0.9rem', color: 'var(--sba-text)', fontWeight: '500' }}>{plan.new ? `${plan.new.books.map(b => SHORT_TO_FULL[b] || b).join(', ')} ${plan.new.verseRaw}장` : '일정 없음'}</span>
                                 </div>
                             </div>
-                        </div>
+                        </SpotlightCard>
                     );
                 })}
             </div>

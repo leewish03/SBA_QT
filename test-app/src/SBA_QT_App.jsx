@@ -7,6 +7,7 @@ import { TabToday, TabReading, TabBookmarks, SharingTab } from './components/Tab
 import { TabWeekly, AdminModal, CalendarModal, AuthModal } from './components/WeeklyAndModals';
 import { supabase } from './utils/supabaseClient';
 import { syncLocalDataToCloud } from './utils/syncManager';
+import { DecryptedText } from './components/ReactBits';
 
 const DEFAULT_START_DATE = "2024-12-17";
 
@@ -413,8 +414,12 @@ export default function SBA_QT_App() {
             {isSplashVisible && (
                 <div className={`sba-splash-screen ${isSplashFading ? 'fade-out' : ''}`}>
                     <div className="sba-splash-content">
-                        <h1 className="sba-splash-main-title">서울북부교회</h1>
-                        <h2 className="sba-splash-sub-title">QT & 통독</h2>
+                        <h1 className="sba-splash-main-title">
+                            <DecryptedText text="서울북부교회" speed={40} maxIterations={5} />
+                        </h1>
+                        <h2 className="sba-splash-sub-title">
+                            <DecryptedText text="QT & 통독" speed={50} maxIterations={5} />
+                        </h2>
                         <p className="sba-splash-desc">말씀으로 하루를 여는 은혜의 시간</p>
                     </div>
                     <div className="sba-splash-footer">
