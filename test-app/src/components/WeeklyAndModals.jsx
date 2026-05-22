@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { calcQtDays, getEffectiveDate, SHORT_TO_FULL } from '../utils/bibleLogic';
+import { calcQtDays, getEffectiveDate, SHORT_TO_FULL, safeToISODateString } from '../utils/bibleLogic';
 import { supabase } from '../utils/supabaseClient';
 import { SpotlightCard } from './ReactBits';
 
@@ -274,13 +274,115 @@ const DeleteTextButton = styled.button`
   }
 `;
 
-export function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, addToast }) {
+const SettingRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--sba-border);
+`;
+
+const SettingLabel = styled.span`
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--sba-text);
+`;
+
+const SettingControl = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const SwitchContainer = styled.label`
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+`;
+
+const SwitchInput = styled.input`
+  opacity: 0;
+  width: 0;
+  height: 0;
+  
+  &:checked + span {
+    background-color: var(--sba-text);
+  }
+  
+  &:checked + span:before {
+    transform: translateX(24px);
+    background-color: var(--sba-bg);
+  }
+`;
+
+const SwitchSlider = styled.span`
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--sba-border-strong);
+  transition: .2s;
+  border-radius: 24px;
+  
+  &:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--sba-text);
+    transition: .2s;
+    border-radius: 50%;
+  }
+`;
+
+const FontSizeBtn = styled.button`
+  background: var(--sba-card-sub-bg);
+  border: 1px solid var(--sba-border-strong);
+  color: var(--sba-text);
+  font-size: 0.9rem;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  
+  &:hover {
+    background: var(--sba-border);
+  }
+`;
+
+const FontSizeVal = styled.span`
+  font-size: 0.9rem;
+  font-weight: 600;
+  min-width: 48px;
+  text-align: center;
+`;
+
+export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setStartDateStr, addToast, session }) {
     const [token, setToken] = useState('sba_qt_admin_secret_token');
     const [syncing, setSyncing] = useState(false);
     const [refls, setRefls] = useState([]);
     const [stats, setStats] = useState({ bookmarks: 0, notes: 0 });
+    const [fontSize, setFontSize] = useState(() => {
+        const saved = localStorage.getItem('sba_bible_font_size');
+        return saved ? parseFloat(saved) : 17.6;
+    });
+
+    const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
+
+    const changeFontSize = (delta) => {
+        setFontSize(prev => {
+            const next = Math.min(30, Math.max(12, prev + delta));
+            localStorage.setItem('sba_bible_font_size', next.toFixed(1));
+            document.documentElement.style.setProperty('--sba-bible-font-size', `${next.toFixed(1)}px`);
+            return next;
+        });
+    };
 
     const loadRefls = async () => {
+        if (!isAdmin) return;
         try {
             const { data, error } = await supabase
                 .from('qt_shared_reflections')
@@ -313,7 +415,7 @@ export function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, add
             loadRefls();
             loadStats();
         }
-    }, [isOpen]);
+    }, [isOpen, session]);
 
     if (!isOpen) return null;
 
@@ -390,57 +492,89 @@ export function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, add
         <ModalOverlay onClick={onClose}>
             <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '95%' }}>
                 <ModalHeader>
-                    <ModalTitle>관리자 설정 (Admin)</ModalTitle>
+                    <ModalTitle>설정 (Settings)</ModalTitle>
                     <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
                 </ModalHeader>
-                <p style={{fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px'}}>
-                    큐티 기준일 변경 및 시트 캐시 초기화
-                </p>
                 
-                <FormGroup>
-                    <FormLabel>시작 기준일 (localStorage)</FormLabel>
-                    <FormInput 
-                        type="date" 
-                        value={startDateStr} 
-                        onChange={e => setStartDateStr(e.target.value)}
-                    />
-                </FormGroup>
-                
-                <FormGroup>
-                    <FormLabel>Purge 관리자 토큰</FormLabel>
-                    <FormInput 
-                        type="password" 
-                        value={token} 
-                        onChange={e => setToken(e.target.value)}
-                    />
-                </FormGroup>
+                {/* 다크모드 설정 */}
+                <SettingRow>
+                    <SettingLabel>다크 테마 (Dark Mode)</SettingLabel>
+                    <SettingControl>
+                        <SwitchContainer>
+                            <SwitchInput 
+                                type="checkbox" 
+                                checked={isDark} 
+                                onChange={e => setIsDark(e.target.checked)} 
+                            />
+                            <SwitchSlider />
+                        </SwitchContainer>
+                    </SettingControl>
+                </SettingRow>
 
-                <AdminSectionTitle>지체들의 묵상 공유글 관리</AdminSectionTitle>
-                <AdminReflList>
-                    {refls.length === 0 ? (
-                        <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--sba-text-muted)', padding: '10px 0' }}>공유된 글이 없습니다.</div>
-                    ) : (
-                        refls.map(r => (
-                            <AdminReflItem key={r.id}>
-                                <span>{r.author_name} - {r.passage}</span>
-                                <DeleteTextButton onClick={() => handleDeleteRefl(r.id)}>삭제</DeleteTextButton>
-                            </AdminReflItem>
-                        ))
-                    )}
-                </AdminReflList>
+                {/* 글자 크기 설정 */}
+                <SettingRow>
+                    <SettingLabel>글자 크기 (Font Size)</SettingLabel>
+                    <SettingControl>
+                        <FontSizeBtn onClick={() => changeFontSize(-1.6)}>A-</FontSizeBtn>
+                        <FontSizeVal>{fontSize.toFixed(1)}px</FontSizeVal>
+                        <FontSizeBtn onClick={() => changeFontSize(1.6)}>A+</FontSizeBtn>
+                    </SettingControl>
+                </SettingRow>
 
-                <AdminSectionTitle>로컬 데이터 진단</AdminSectionTitle>
-                <div style={{ fontSize: '0.8rem', color: 'var(--sba-text-secondary)', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>북마크: {stats.bookmarks}개 | 오늘의 메모: {stats.notes}개</span>
-                    <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 캐시 초기화</DeleteTextButton>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px' }}>
+                    <span>북마크: {stats.bookmarks}개 | 메모: {stats.notes}개</span>
+                    <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 데이터 초기화</DeleteTextButton>
                 </div>
+
+                {isAdmin && (
+                    <>
+                        <p style={{fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '16px 0 12px', borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '12px'}}>
+                            <b>관리자 전용 설정 (Admin)</b>
+                        </p>
+                        
+                        <FormGroup>
+                            <FormLabel>시작 기준일 (localStorage)</FormLabel>
+                            <FormInput 
+                                type="date" 
+                                value={startDateStr} 
+                                onChange={e => setStartDateStr(e.target.value)}
+                            />
+                        </FormGroup>
+                        
+                        <FormGroup>
+                            <FormLabel>Purge 관리자 토큰</FormLabel>
+                            <FormInput 
+                                type="password" 
+                                value={token} 
+                                onChange={e => setToken(e.target.value)}
+                            />
+                        </FormGroup>
+
+                        <AdminSectionTitle>지체들의 묵상 공유글 관리</AdminSectionTitle>
+                        <AdminReflList>
+                            {refls.length === 0 ? (
+                                <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--sba-text-muted)', padding: '10px 0' }}>공유된 글이 없습니다.</div>
+                            ) : (
+                                refls.map(r => (
+                                    <AdminReflItem key={r.id}>
+                                        <span>{r.author_name} - {r.passage}</span>
+                                        <DeleteTextButton onClick={() => handleDeleteRefl(r.id)}>삭제</DeleteTextButton>
+                                    </AdminReflItem>
+                                ))
+                            )}
+                        </AdminReflList>
+                        
+                        <ButtonGroup style={{ flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
+                            <ShadButton $variant="accent" onClick={handleSync} disabled={syncing}>
+                                {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
+                            </ShadButton>
+                        </ButtonGroup>
+                    </>
+                )}
                 
-                <ButtonGroup style={{ flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
-                    <ShadButton $variant="accent" onClick={handleSync} disabled={syncing}>
-                        {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
-                    </ShadButton>
-                    <ShadButton $variant="outline" onClick={onClose}>
-                        닫기 및 저장
+                <ButtonGroup style={{ marginTop: '20px' }}>
+                    <ShadButton onClick={onClose}>
+                        확인
                     </ShadButton>
                 </ButtonGroup>
             </ModalContent>
@@ -611,8 +745,8 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
                     {days.map((date, idx) => {
                         if (!date) return <div key={`empty-${idx}`} />;
                         
-                        const dateStr = date.toISOString().split('T')[0];
-                        const isSelected = dateStr === safeCurrentDate.toISOString().split('T')[0];
+                        const dateStr = safeToISODateString(date);
+                        const isSelected = dateStr === safeToISODateString(safeCurrentDate);
                         const hasNote = noteDates.has(dateStr);
                         
                         return (

@@ -4,6 +4,7 @@
 * {
     box-sizing: border-box;
     font-family: 'Pretendard', sans-serif;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .sba-app-container {
@@ -178,6 +179,13 @@
     background-color: var(--sba-highlight);
 }
 .sba-verse-block.highlighted:hover {
+    background-color: var(--sba-highlight-hover);
+}
+
+.sba-verse-block.focused {
+    background-color: var(--sba-card-active);
+}
+.sba-verse-block.focused.highlighted {
     background-color: var(--sba-highlight-hover);
 }
 

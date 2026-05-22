@@ -9,22 +9,11 @@ const ICONS = {
     sharing: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 };
 
-export function TopHeader({ currentDate, onOpenCalendar, isDark, onToggleDark, session, onOpenAuth, onOpenAdmin }) {
+export function TopHeader({ currentDate, onOpenCalendar, session, onOpenAuth, onOpenSettings }) {
     const month = currentDate.getMonth() + 1;
     const day = currentDate.getDate();
     const days = ["일", "월", "화", "수", "목", "금", "토"];
     const dayName = days[currentDate.getDay()];
-
-    const handleFontSize = (delta) => {
-        const root = document.documentElement;
-        let currentSize = parseFloat(root.style.getPropertyValue('--sba-bible-font-size') || '17.6');
-        if (isNaN(currentSize)) currentSize = 17.6;
-        let newSize = currentSize + delta;
-        if (newSize < 12) newSize = 12;
-        if (newSize > 24) newSize = 24;
-        root.style.setProperty('--sba-bible-font-size', `${newSize}px`);
-        localStorage.setItem('sba_bible_font_size', newSize);
-    };
 
     const handleLogout = async () => {
         if (window.confirm("로그아웃 하시겠습니까?")) {
@@ -50,25 +39,10 @@ export function TopHeader({ currentDate, onOpenCalendar, isDark, onToggleDark, s
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
             </h1>
             <div style={{display:'flex', gap:'6px', alignItems: 'center'}}>
-                {/* 글자 크기 변경 */}
-                <button className="sba-header-icon" onClick={() => handleFontSize(-1)} title="글자 작게" style={{fontSize:'0.85rem', fontWeight:'bold', width:'32px', height:'32px', padding:0}} >A-</button>
-                <button className="sba-header-icon" onClick={() => handleFontSize(1)} title="글자 크게" style={{fontSize:'1.05rem', fontWeight:'bold', width:'32px', height:'32px', padding:0}}>A+</button>
-                
-                {/* 다크모드 토글 */}
-                <button className="sba-header-icon" onClick={onToggleDark} title={isDark ? "라이트 모드" : "다크 모드"} style={{width:'32px', height:'32px', padding:0}}>
-                    {isDark ? (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-                    ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-                    )}
+                {/* 설정 버튼 */}
+                <button className="sba-header-icon" onClick={onOpenSettings} title="설정" style={{width:'32px', height:'32px', padding:0}}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                 </button>
-
-                {/* 관리자 설정 버튼 */}
-                {session?.user?.email === 'lekas1217@gmail.com' && (
-                    <button className="sba-header-icon" onClick={onOpenAdmin} title="관리자 설정" style={{width:'32px', height:'32px', padding:0}}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                    </button>
-                )}
 
                 {/* 소셜 로그인 / 사용자 정보 */}
                 {session ? (

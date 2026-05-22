@@ -15,6 +15,7 @@ const SbaStyledWrapper = styled.div`
 * {
     box-sizing: border-box;
     font-family: 'Pretendard', sans-serif;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .sba-app-container {
@@ -189,6 +190,13 @@ const SbaStyledWrapper = styled.div`
     background-color: var(--sba-highlight);
 }
 .sba-verse-block.highlighted:hover {
+    background-color: var(--sba-highlight-hover);
+}
+
+.sba-verse-block.focused {
+    background-color: var(--sba-card-active);
+}
+.sba-verse-block.focused.highlighted {
     background-color: var(--sba-highlight-hover);
 }
 
@@ -1139,7 +1147,7 @@ async function syncNotes(userId) {
   const toUpload = [];
   const mergedNotes = { ...localNotes };
 
-  // 1. 클라우드 메모를 순회하며 로컬과 병합
+  // 1. 클라우드 메모를 순회하며 로컬과 병합 (updated_at 타임스탬프 기준)
   cloudNotes.forEach(cloud => {
     const date = cloud.target_date;
     const local = localNotes[date];
@@ -1152,31 +1160,41 @@ async function syncNotes(userId) {
       };
     } else {
       // 로컬과 클라우드 모두 존재
-      const localContent = (local.content || '').trim();
-      const cloudContent = (cloud.content || '').trim();
+      const localTime = new Date(local.updated_at || 0).getTime();
+      const cloudTime = new Date(cloud.updated_at || 0).getTime();
 
-      if (localContent !== cloudContent) {
-        // 내용이 다른 경우 병합 정책 (Append)
-        // 만약 로컬 내용에 클라우드 내용이 이미 포함되어 있거나 그 반대인 경우 중복 병합 방지
-        let finalContent = localContent;
-        if (!localContent.includes(cloudContent) && !cloudContent.includes(localContent)) {
-          finalContent = `${localContent}\n---\n${cloudContent}`;
-        } else if (cloudContent.length > localContent.length) {
-          finalContent = cloudContent;
-        }
-
-        const now = new Date().toISOString();
-        mergedNotes[date] = {
-          content: finalContent,
-          updated_at: now
-        };
-
+      if (localTime > cloudTime) {
+        // 로컬이 더 최신인 경우 -> 클라우드를 로컬 내용으로 업데이트
         toUpload.push({
           user_id: userId,
           target_date: date,
-          content: finalContent,
-          updated_at: now
+          content: local.content,
+          updated_at: local.updated_at
         });
+        mergedNotes[date] = local;
+      } else if (cloudTime > localTime) {
+        // 클라우드가 더 최신인 경우 -> 로컬을 클라우드 내용으로 업데이트
+        mergedNotes[date] = {
+          content: cloud.content,
+          updated_at: cloud.updated_at
+        };
+      } else {
+        // 타임스탬프가 같은 경우 -> 내용 다를 때만 동기화 (더 긴 쪽 우선 폴백)
+        if (local.content !== cloud.content) {
+          if (cloud.content.length > local.content.length) {
+            mergedNotes[date] = {
+              content: cloud.content,
+              updated_at: cloud.updated_at
+            };
+          } else {
+            toUpload.push({
+              user_id: userId,
+              target_date: date,
+              content: local.content,
+              updated_at: local.updated_at
+            });
+          }
+        }
       }
     }
   });
@@ -1222,22 +1240,11 @@ const ICONS = {
     sharing: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 };
 
-function TopHeader({ currentDate, onOpenCalendar, isDark, onToggleDark, session, onOpenAuth, onOpenAdmin }) {
+function TopHeader({ currentDate, onOpenCalendar, session, onOpenAuth, onOpenSettings }) {
     const month = currentDate.getMonth() + 1;
     const day = currentDate.getDate();
     const days = ["일", "월", "화", "수", "목", "금", "토"];
     const dayName = days[currentDate.getDay()];
-
-    const handleFontSize = (delta) => {
-        const root = document.documentElement;
-        let currentSize = parseFloat(root.style.getPropertyValue('--sba-bible-font-size') || '17.6');
-        if (isNaN(currentSize)) currentSize = 17.6;
-        let newSize = currentSize + delta;
-        if (newSize < 12) newSize = 12;
-        if (newSize > 24) newSize = 24;
-        root.style.setProperty('--sba-bible-font-size', `${newSize}px`);
-        localStorage.setItem('sba_bible_font_size', newSize);
-    };
 
     const handleLogout = async () => {
         if (window.confirm("로그아웃 하시겠습니까?")) {
@@ -1263,25 +1270,10 @@ function TopHeader({ currentDate, onOpenCalendar, isDark, onToggleDark, session,
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
             </h1>
             <div style={{display:'flex', gap:'6px', alignItems: 'center'}}>
-                {/* 글자 크기 변경 */}
-                <button className="sba-header-icon" onClick={() => handleFontSize(-1)} title="글자 작게" style={{fontSize:'0.85rem', fontWeight:'bold', width:'32px', height:'32px', padding:0}} >A-</button>
-                <button className="sba-header-icon" onClick={() => handleFontSize(1)} title="글자 크게" style={{fontSize:'1.05rem', fontWeight:'bold', width:'32px', height:'32px', padding:0}}>A+</button>
-                
-                {/* 다크모드 토글 */}
-                <button className="sba-header-icon" onClick={onToggleDark} title={isDark ? "라이트 모드" : "다크 모드"} style={{width:'32px', height:'32px', padding:0}}>
-                    {isDark ? (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-                    ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-                    )}
+                {/* 설정 버튼 */}
+                <button className="sba-header-icon" onClick={onOpenSettings} title="설정" style={{width:'32px', height:'32px', padding:0}}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                 </button>
-
-                {/* 관리자 설정 버튼 */}
-                {session?.user?.email === 'lekas1217@gmail.com' && (
-                    <button className="sba-header-icon" onClick={onOpenAdmin} title="관리자 설정" style={{width:'32px', height:'32px', padding:0}}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                    </button>
-                )}
 
                 {/* 소셜 로그인 / 사용자 정보 */}
                 {session ? (
@@ -1516,7 +1508,7 @@ function NoteEditor({ targetDate, session }) {
   const timerRef = useRef(null);
   const isDirtyRef = useRef(false);
 
-  const dateStr = targetDate.toISOString().split('T')[0];
+  const dateStr = safeToISODateString(targetDate);
 
   useEffect(() => {
     let localVal = '';
@@ -1942,7 +1934,7 @@ function TabToday({ todayPlan, session, addToast, onBookmarkChange }) {
         book={abbrev} 
         chapter={verse} 
         verses={verses} 
-        dateStr={todayPlan.dateObj.toISOString().split('T')[0]}
+        dateStr={safeToISODateString(todayPlan.dateObj)}
         session={session}
         addToast={addToast}
         onBookmarkChange={onBookmarkChange}
@@ -2048,7 +2040,7 @@ function TabReading({ todayPlan, session, addToast, onBookmarkChange }) {
             book={block.book}
             chapter={block.chapter}
             verses={block.verses}
-            dateStr={todayPlan.dateObj.toISOString().split('T')[0]}
+            dateStr={safeToISODateString(todayPlan.dateObj)}
             session={session}
             addToast={addToast}
             onBookmarkChange={onBookmarkChange}
@@ -2126,7 +2118,7 @@ function BookmarkDetailModal({ bookmark, onClose, onSaveMemo, onDelete, onGoToVe
   const [memoText, setMemoText] = useState(bookmark.memo || '');
 
   const handleImportTodayMemo = () => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = safeToISODateString(getEffectiveDate());
     try {
       const raw = localStorage.getItem('sba_qt_notes');
       if (raw) {
@@ -3009,9 +3001,7 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
 
   const getTodayDateStr = () => {
-    const d = new Date();
-    if (d.getHours() < 5) d.setDate(d.getDate() - 1);
-    return d.toISOString().split('T')[0];
+    return safeToISODateString(getEffectiveDate());
   };
 
   const todayStr = getTodayDateStr();
@@ -3983,13 +3973,115 @@ const DeleteTextButton = styled.button`
   }
 `;
 
-function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, addToast }) {
+const SettingRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--sba-border);
+`;
+
+const SettingLabel = styled.span`
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--sba-text);
+`;
+
+const SettingControl = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const SwitchContainer = styled.label`
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+`;
+
+const SwitchInput = styled.input`
+  opacity: 0;
+  width: 0;
+  height: 0;
+  
+  &:checked + span {
+    background-color: var(--sba-text);
+  }
+  
+  &:checked + span:before {
+    transform: translateX(24px);
+    background-color: var(--sba-bg);
+  }
+`;
+
+const SwitchSlider = styled.span`
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--sba-border-strong);
+  transition: .2s;
+  border-radius: 24px;
+  
+  &:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--sba-text);
+    transition: .2s;
+    border-radius: 50%;
+  }
+`;
+
+const FontSizeBtn = styled.button`
+  background: var(--sba-card-sub-bg);
+  border: 1px solid var(--sba-border-strong);
+  color: var(--sba-text);
+  font-size: 0.9rem;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  
+  &:hover {
+    background: var(--sba-border);
+  }
+`;
+
+const FontSizeVal = styled.span`
+  font-size: 0.9rem;
+  font-weight: 600;
+  min-width: 48px;
+  text-align: center;
+`;
+
+function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setStartDateStr, addToast, session }) {
     const [token, setToken] = useState('sba_qt_admin_secret_token');
     const [syncing, setSyncing] = useState(false);
     const [refls, setRefls] = useState([]);
     const [stats, setStats] = useState({ bookmarks: 0, notes: 0 });
+    const [fontSize, setFontSize] = useState(() => {
+        const saved = localStorage.getItem('sba_bible_font_size');
+        return saved ? parseFloat(saved) : 17.6;
+    });
+
+    const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
+
+    const changeFontSize = (delta) => {
+        setFontSize(prev => {
+            const next = Math.min(30, Math.max(12, prev + delta));
+            localStorage.setItem('sba_bible_font_size', next.toFixed(1));
+            document.documentElement.style.setProperty('--sba-bible-font-size', `${next.toFixed(1)}px`);
+            return next;
+        });
+    };
 
     const loadRefls = async () => {
+        if (!isAdmin) return;
         try {
             const { data, error } = await supabase
                 .from('qt_shared_reflections')
@@ -4022,7 +4114,7 @@ function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, addToast }
             loadRefls();
             loadStats();
         }
-    }, [isOpen]);
+    }, [isOpen, session]);
 
     if (!isOpen) return null;
 
@@ -4099,57 +4191,89 @@ function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, addToast }
         <ModalOverlay onClick={onClose}>
             <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '95%' }}>
                 <ModalHeader>
-                    <ModalTitle>관리자 설정 (Admin)</ModalTitle>
+                    <ModalTitle>설정 (Settings)</ModalTitle>
                     <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
                 </ModalHeader>
-                <p style={{fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px'}}>
-                    큐티 기준일 변경 및 시트 캐시 초기화
-                </p>
                 
-                <FormGroup>
-                    <FormLabel>시작 기준일 (localStorage)</FormLabel>
-                    <FormInput 
-                        type="date" 
-                        value={startDateStr} 
-                        onChange={e => setStartDateStr(e.target.value)}
-                    />
-                </FormGroup>
-                
-                <FormGroup>
-                    <FormLabel>Purge 관리자 토큰</FormLabel>
-                    <FormInput 
-                        type="password" 
-                        value={token} 
-                        onChange={e => setToken(e.target.value)}
-                    />
-                </FormGroup>
+                {/* 다크모드 설정 */}
+                <SettingRow>
+                    <SettingLabel>다크 테마 (Dark Mode)</SettingLabel>
+                    <SettingControl>
+                        <SwitchContainer>
+                            <SwitchInput 
+                                type="checkbox" 
+                                checked={isDark} 
+                                onChange={e => setIsDark(e.target.checked)} 
+                            />
+                            <SwitchSlider />
+                        </SwitchContainer>
+                    </SettingControl>
+                </SettingRow>
 
-                <AdminSectionTitle>지체들의 묵상 공유글 관리</AdminSectionTitle>
-                <AdminReflList>
-                    {refls.length === 0 ? (
-                        <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--sba-text-muted)', padding: '10px 0' }}>공유된 글이 없습니다.</div>
-                    ) : (
-                        refls.map(r => (
-                            <AdminReflItem key={r.id}>
-                                <span>{r.author_name} - {r.passage}</span>
-                                <DeleteTextButton onClick={() => handleDeleteRefl(r.id)}>삭제</DeleteTextButton>
-                            </AdminReflItem>
-                        ))
-                    )}
-                </AdminReflList>
+                {/* 글자 크기 설정 */}
+                <SettingRow>
+                    <SettingLabel>글자 크기 (Font Size)</SettingLabel>
+                    <SettingControl>
+                        <FontSizeBtn onClick={() => changeFontSize(-1.6)}>A-</FontSizeBtn>
+                        <FontSizeVal>{fontSize.toFixed(1)}px</FontSizeVal>
+                        <FontSizeBtn onClick={() => changeFontSize(1.6)}>A+</FontSizeBtn>
+                    </SettingControl>
+                </SettingRow>
 
-                <AdminSectionTitle>로컬 데이터 진단</AdminSectionTitle>
-                <div style={{ fontSize: '0.8rem', color: 'var(--sba-text-secondary)', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>북마크: {stats.bookmarks}개 | 오늘의 메모: {stats.notes}개</span>
-                    <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 캐시 초기화</DeleteTextButton>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px' }}>
+                    <span>북마크: {stats.bookmarks}개 | 메모: {stats.notes}개</span>
+                    <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 데이터 초기화</DeleteTextButton>
                 </div>
+
+                {isAdmin && (
+                    <>
+                        <p style={{fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '16px 0 12px', borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '12px'}}>
+                            <b>관리자 전용 설정 (Admin)</b>
+                        </p>
+                        
+                        <FormGroup>
+                            <FormLabel>시작 기준일 (localStorage)</FormLabel>
+                            <FormInput 
+                                type="date" 
+                                value={startDateStr} 
+                                onChange={e => setStartDateStr(e.target.value)}
+                            />
+                        </FormGroup>
+                        
+                        <FormGroup>
+                            <FormLabel>Purge 관리자 토큰</FormLabel>
+                            <FormInput 
+                                type="password" 
+                                value={token} 
+                                onChange={e => setToken(e.target.value)}
+                            />
+                        </FormGroup>
+
+                        <AdminSectionTitle>지체들의 묵상 공유글 관리</AdminSectionTitle>
+                        <AdminReflList>
+                            {refls.length === 0 ? (
+                                <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--sba-text-muted)', padding: '10px 0' }}>공유된 글이 없습니다.</div>
+                            ) : (
+                                refls.map(r => (
+                                    <AdminReflItem key={r.id}>
+                                        <span>{r.author_name} - {r.passage}</span>
+                                        <DeleteTextButton onClick={() => handleDeleteRefl(r.id)}>삭제</DeleteTextButton>
+                                    </AdminReflItem>
+                                ))
+                            )}
+                        </AdminReflList>
+                        
+                        <ButtonGroup style={{ flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
+                            <ShadButton $variant="accent" onClick={handleSync} disabled={syncing}>
+                                {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
+                            </ShadButton>
+                        </ButtonGroup>
+                    </>
+                )}
                 
-                <ButtonGroup style={{ flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
-                    <ShadButton $variant="accent" onClick={handleSync} disabled={syncing}>
-                        {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
-                    </ShadButton>
-                    <ShadButton $variant="outline" onClick={onClose}>
-                        닫기 및 저장
+                <ButtonGroup style={{ marginTop: '20px' }}>
+                    <ShadButton onClick={onClose}>
+                        확인
                     </ShadButton>
                 </ButtonGroup>
             </ModalContent>
@@ -4320,8 +4444,8 @@ function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
                     {days.map((date, idx) => {
                         if (!date) return <div key={`empty-${idx}`} />;
                         
-                        const dateStr = date.toISOString().split('T')[0];
-                        const isSelected = dateStr === safeCurrentDate.toISOString().split('T')[0];
+                        const dateStr = safeToISODateString(date);
+                        const isSelected = dateStr === safeToISODateString(safeCurrentDate);
                         const hasNote = noteDates.has(dateStr);
                         
                         return (
@@ -4486,9 +4610,59 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
 
     // 모달 관리
     const [showCalendar, setShowCalendar] = useState(false);
-    const [showAdmin, setShowAdmin] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
     const [showAuth, setShowAuth] = useState(false);
     const [adminClicks, setAdminClicks] = useState(0);
+
+    // 스와이프 제스처 상태
+    const [touchStart, setTouchStart] = useState({ x: 0, y: 0 });
+
+    const handleTouchStart = (e) => {
+        // 모달 내부, 입력 필드, 또는 특정 예외 영역에서의 터치는 무시
+        if (e.target.closest('textarea') || e.target.closest('input') || e.target.closest('[role="dialog"]') || e.target.closest('.sba-modal-content') || e.target.closest('.sba-weekly-list') || e.target.closest('.sba-bottom-nav') || e.target.closest('.sba-header')) {
+            return;
+        }
+        setTouchStart({
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY
+        });
+    };
+
+    const handleTouchEnd = (e) => {
+        if (touchStart.x === 0 && touchStart.y === 0) return;
+        
+        if (e.target.closest('textarea') || e.target.closest('input') || e.target.closest('[role="dialog"]') || e.target.closest('.sba-modal-content') || e.target.closest('.sba-weekly-list') || e.target.closest('.sba-bottom-nav') || e.target.closest('.sba-header')) {
+            setTouchStart({ x: 0, y: 0 });
+            return;
+        }
+
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+        const diffX = touchEndX - touchStart.x;
+        const diffY = touchEndY - touchStart.y;
+
+        // X축 이동이 유의미하고 Y축 이동이 세로 스크롤 범위 내인 경우
+        if (Math.abs(diffX) > 70 && Math.abs(diffY) < 80) {
+            if (diffX > 70) {
+                // 오른쪽 스와이프 -> 이전 날짜
+                setCurrentDate(prev => {
+                    const next = new Date(prev.getTime());
+                    next.setDate(next.getDate() - 1);
+                    return next;
+                });
+                addToast("이전 날짜로 이동했습니다.");
+            } else if (diffX < -70) {
+                // 왼쪽 스와이프 -> 다음 날짜
+                setCurrentDate(prev => {
+                    const next = new Date(prev.getTime());
+                    next.setDate(next.getDate() + 1);
+                    return next;
+                });
+                addToast("다음 날짜로 이동했습니다.");
+            }
+        }
+        setTouchStart({ x: 0, y: 0 });
+    };
     
     // 시작 기준일 상태 (기본값 설정 및 로컬스토리지 로딩)
     const [startDateStr, setStartDateStr] = useState(() => {
@@ -4671,7 +4845,7 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
     const handleAdminClick = () => {
         const next = adminClicks + 1;
         if (next >= 5) {
-            setShowAdmin(true);
+            setShowSettings(true);
             setAdminClicks(0);
         } else {
             setAdminClicks(next);
@@ -4869,14 +5043,16 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
             <TopHeader 
                 currentDate={effectiveDate} 
                 onOpenCalendar={() => setShowCalendar(true)} 
-                isDark={isDark}
-                onToggleDark={() => setIsDark(prev => !prev)}
                 session={session}
                 onOpenAuth={() => setShowAuth(true)}
-                onOpenAdmin={() => setShowAdmin(true)}
+                onOpenSettings={() => setShowSettings(true)}
             />
             
-            <main className="sba-content">
+            <main 
+                className="sba-content"
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+            >
                 {renderContent()}
                 <AppFooter />
             </main>
@@ -4890,12 +5066,15 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
                 onSetDate={handleSetDate} 
             />
             
-            <AdminModal 
-                isOpen={showAdmin} 
-                onClose={() => setShowAdmin(false)} 
+            <SettingsModal 
+                isOpen={showSettings} 
+                onClose={() => setShowSettings(false)} 
+                isDark={isDark}
+                setIsDark={setIsDark}
                 startDateStr={startDateStr} 
                 setStartDateStr={handleSetStartDateStr}
                 addToast={addToast}
+                session={session}
             />
 
             <AuthModal

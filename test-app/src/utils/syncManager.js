@@ -134,7 +134,7 @@ async function syncNotes(userId) {
   const toUpload = [];
   const mergedNotes = { ...localNotes };
 
-  // 1. 클라우드 메모를 순회하며 로컬과 병합
+  // 1. 클라우드 메모를 순회하며 로컬과 병합 (updated_at 타임스탬프 기준)
   cloudNotes.forEach(cloud => {
     const date = cloud.target_date;
     const local = localNotes[date];
@@ -147,31 +147,41 @@ async function syncNotes(userId) {
       };
     } else {
       // 로컬과 클라우드 모두 존재
-      const localContent = (local.content || '').trim();
-      const cloudContent = (cloud.content || '').trim();
+      const localTime = new Date(local.updated_at || 0).getTime();
+      const cloudTime = new Date(cloud.updated_at || 0).getTime();
 
-      if (localContent !== cloudContent) {
-        // 내용이 다른 경우 병합 정책 (Append)
-        // 만약 로컬 내용에 클라우드 내용이 이미 포함되어 있거나 그 반대인 경우 중복 병합 방지
-        let finalContent = localContent;
-        if (!localContent.includes(cloudContent) && !cloudContent.includes(localContent)) {
-          finalContent = `${localContent}\n---\n${cloudContent}`;
-        } else if (cloudContent.length > localContent.length) {
-          finalContent = cloudContent;
-        }
-
-        const now = new Date().toISOString();
-        mergedNotes[date] = {
-          content: finalContent,
-          updated_at: now
-        };
-
+      if (localTime > cloudTime) {
+        // 로컬이 더 최신인 경우 -> 클라우드를 로컬 내용으로 업데이트
         toUpload.push({
           user_id: userId,
           target_date: date,
-          content: finalContent,
-          updated_at: now
+          content: local.content,
+          updated_at: local.updated_at
         });
+        mergedNotes[date] = local;
+      } else if (cloudTime > localTime) {
+        // 클라우드가 더 최신인 경우 -> 로컬을 클라우드 내용으로 업데이트
+        mergedNotes[date] = {
+          content: cloud.content,
+          updated_at: cloud.updated_at
+        };
+      } else {
+        // 타임스탬프가 같은 경우 -> 내용 다를 때만 동기화 (더 긴 쪽 우선 폴백)
+        if (local.content !== cloud.content) {
+          if (cloud.content.length > local.content.length) {
+            mergedNotes[date] = {
+              content: cloud.content,
+              updated_at: cloud.updated_at
+            };
+          } else {
+            toUpload.push({
+              user_id: userId,
+              target_date: date,
+              content: local.content,
+              updated_at: local.updated_at
+            });
+          }
+        }
       }
     }
   });

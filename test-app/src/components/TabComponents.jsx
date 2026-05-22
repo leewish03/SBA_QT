@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import styled from 'styled-components';
-import { SHORT_TO_FULL, FULL_TO_SHORT } from '../utils/bibleLogic';
+import { SHORT_TO_FULL, FULL_TO_SHORT, safeToISODateString, getEffectiveDate } from '../utils/bibleLogic';
 import { bibleStorage } from '../utils/BibleStorage';
 import { supabase } from '../utils/supabaseClient';
 import { ShinyText, SpotlightCard } from './ReactBits';
@@ -187,7 +187,7 @@ function NoteEditor({ targetDate, session }) {
   const timerRef = useRef(null);
   const isDirtyRef = useRef(false);
 
-  const dateStr = targetDate.toISOString().split('T')[0];
+  const dateStr = safeToISODateString(targetDate);
 
   useEffect(() => {
     let localVal = '';
@@ -613,7 +613,7 @@ export function TabToday({ todayPlan, session, addToast, onBookmarkChange }) {
         book={abbrev} 
         chapter={verse} 
         verses={verses} 
-        dateStr={todayPlan.dateObj.toISOString().split('T')[0]}
+        dateStr={safeToISODateString(todayPlan.dateObj)}
         session={session}
         addToast={addToast}
         onBookmarkChange={onBookmarkChange}
@@ -719,7 +719,7 @@ export function TabReading({ todayPlan, session, addToast, onBookmarkChange }) {
             book={block.book}
             chapter={block.chapter}
             verses={block.verses}
-            dateStr={todayPlan.dateObj.toISOString().split('T')[0]}
+            dateStr={safeToISODateString(todayPlan.dateObj)}
             session={session}
             addToast={addToast}
             onBookmarkChange={onBookmarkChange}
@@ -797,7 +797,7 @@ function BookmarkDetailModal({ bookmark, onClose, onSaveMemo, onDelete, onGoToVe
   const [memoText, setMemoText] = useState(bookmark.memo || '');
 
   const handleImportTodayMemo = () => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = safeToISODateString(getEffectiveDate());
     try {
       const raw = localStorage.getItem('sba_qt_notes');
       if (raw) {
@@ -1680,9 +1680,7 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
 
   const getTodayDateStr = () => {
-    const d = new Date();
-    if (d.getHours() < 5) d.setDate(d.getDate() - 1);
-    return d.toISOString().split('T')[0];
+    return safeToISODateString(getEffectiveDate());
   };
 
   const todayStr = getTodayDateStr();
