@@ -1,5 +1,15 @@
 {
+  "name": "sba-qt-server",
+  "version": "1.0.0",
+  "description": "SBA QT Express Server with Vite Frontend Integration",
+  "main": "server_template.js",
+  "scripts": {
+    "build": "cd test-app && npm install && npm run build",
+    "start": "node server_template.js"
+  },
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "googleapis": "^171.4.0"
   }
 }

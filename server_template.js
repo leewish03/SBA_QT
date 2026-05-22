@@ -5,14 +5,37 @@ const { google } = require('googleapis');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const path = require('path');
+
 // CORS 설정 (프론트엔드 도메인이 확정되면 해당 도메인만 허용하도록 변경 가능)
 app.use(cors());
 
-// Google Sheets API 인증 설정
-const auth = new google.auth.GoogleAuth({
-    keyFile: './cbf-praylist-11bbf27f1baa.json', // 인증키 파일
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-});
+// React 빌드 결과물(test-app/dist) 정적 파일 서빙
+app.use(express.static(path.join(__dirname, 'test-app/dist')));
+
+// Google Sheets API 인증 설정 (Render 배포 환경에서는 환경 변수를, 로컬에서는 JSON 파일을 사용)
+let auth;
+if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    console.log("환경 변수 GOOGLE_SERVICE_ACCOUNT_JSON을 사용하여 Google Auth를 초기화합니다.");
+    try {
+        const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+        auth = new google.auth.GoogleAuth({
+            credentials,
+            scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+        });
+    } catch (err) {
+        console.error("GOOGLE_SERVICE_ACCOUNT_JSON 환경 변수 파싱 에러:", err.message);
+    }
+}
+
+if (!auth) {
+    console.log("로컬 키 파일(cbf-praylist-11bbf27f1baa.json)을 사용하여 Google Auth를 초기화합니다.");
+    auth = new google.auth.GoogleAuth({
+        keyFile: './cbf-praylist-11bbf27f1baa.json',
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+}
+
 const sheets = google.sheets({ version: 'v4', auth });
 const SPREADSHEET_ID = '1wtUI5KvigQBFz8Z-QBs0nwG90B-wXYyX0luAHSan4SY'; // 대상 구글 시트 ID
 
@@ -88,6 +111,12 @@ app.get('/api/schedule', async (req, res) => {
         console.error("API 요류:", error);
         res.status(500).json({ error: '데이터를 불러오는 중 오류가 발생했습니다.' });
     }
+});
+
+// SPA 대응 라우팅 (API가 아닌 모든 GET 요청은 index.html 서빙)
+app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(__dirname, 'test-app/dist/index.html'));
 });
 
 app.listen(PORT, () => {
