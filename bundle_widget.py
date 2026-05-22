@@ -5,8 +5,8 @@ def read_file(path):
         return f.read()
 
 def bundle_to_single_jsx():
-    # 실제 작업 공간 경로 수정
-    base_dir = "w:/unUniv/프로젝트/0.프로그래밍/교회/SBA_QT - 웹 자동화/SBA_QT-5.0/test-app/src"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.join(script_dir, "test-app", "src")
     
     css_content = read_file(os.path.join(base_dir, "SBA_QT.css"))
     css_lines = css_content.split('\n')
@@ -94,7 +94,7 @@ const SbaStyledWrapper = styled.div`
 {app_clean}
 """
 
-    out_path = "w:/unUniv/프로젝트/0.프로그래밍/교회/SBA_QT - 웹 자동화/SBA_QT-5.0/SBA_QT_Widget.jsx"
+    out_path = os.path.join(script_dir, "SBA_QT_Widget.jsx")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(mega_bundle)
     print("Bundle created perfectly!")
