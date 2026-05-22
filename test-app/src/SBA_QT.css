@@ -33,10 +33,10 @@
     --sba-verse-title: #222;
     --sba-verse-text: #333;
     --sba-verse-num: #6a737b;
-    --sba-splash-bg: #fdfcfb;
-    --sba-splash-title: #111;
-    --sba-splash-sub: #555;
-    --sba-splash-desc: #777;
+    --sba-splash-bg: #fafafa;
+    --sba-splash-title: #09090b;
+    --sba-splash-sub: #71717a;
+    --sba-splash-desc: #a1a1aa;
     --sba-highlight: rgba(245, 158, 11, 0.25);
     --sba-highlight-hover: rgba(245, 158, 11, 0.4);
     --sba-skeleton-bg: #e1e4e8;
@@ -52,7 +52,7 @@
     flex-direction: column;
     box-shadow: 0 4px 20px rgba(0,0,0,0.05);
     position: relative;
-    padding-bottom: 70px; /* Space for bottom nav */
+    padding-bottom: 105px; /* Space for bottom nav (70px) + closed NoteEditor drawer (24px) + margin */
     transition: background-color 0.3s, color 0.3s;
 }
 
@@ -83,10 +83,10 @@
     --sba-verse-title: #ffffff;
     --sba-verse-text: #cccccc;
     --sba-verse-num: #888888;
-    --sba-splash-bg: #121212;
-    --sba-splash-title: #ffffff;
-    --sba-splash-sub: #aaaaaa;
-    --sba-splash-desc: #777777;
+    --sba-splash-bg: #09090b;
+    --sba-splash-title: #fafafa;
+    --sba-splash-sub: #a1a1aa;
+    --sba-splash-desc: #71717a;
     --sba-highlight: rgba(245, 158, 11, 0.4);
     --sba-highlight-hover: rgba(245, 158, 11, 0.55);
     --sba-skeleton-bg: #2d2d2d;
@@ -399,7 +399,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    transition: opacity 0.8s ease-in-out, visibility 0.8s;
+    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.6s;
 }
 
 .sba-splash-screen.fade-out {
@@ -409,40 +409,45 @@
 
 .sba-splash-content {
     text-align: center;
-    animation: fadeInSplash 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    animation: fadeInSplash 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .sba-splash-main-title {
-    font-size: 4.0rem;
+    font-size: 2.5rem;
     font-weight: 800;
     color: var(--sba-splash-title);
-    margin-bottom: 15px;
-    letter-spacing: -2px;
-    line-height: 1.1;
+    margin: 0;
+    letter-spacing: -0.05em;
+    line-height: 1.2;
     word-break: keep-all;
 }
 
 .sba-splash-sub-title {
-    font-size: 2.4rem;
+    font-size: 1.5rem;
     font-weight: 500;
     color: var(--sba-splash-sub);
-    margin-top: 0px;
-    margin-bottom: 30px;
-    letter-spacing: -1px;
+    margin: 0;
+    letter-spacing: -0.03em;
     line-height: 1.2;
 }
 
 .sba-splash-desc {
-    font-size: 1rem;
+    font-size: 0.875rem;
     color: var(--sba-splash-desc);
+    margin-top: 16px;
+    letter-spacing: -0.01em;
 }
 
 .sba-splash-footer {
     position: absolute;
     bottom: 40px;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     color: var(--sba-text-subtle);
-    animation: fadeInSplash 1s ease-out forwards;
+    letter-spacing: 0.05em;
+    animation: fadeInSplash 1.2s ease-out forwards;
 }
 
 @keyframes fadeInSplash {

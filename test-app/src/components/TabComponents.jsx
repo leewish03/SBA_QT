@@ -1,24 +1,176 @@
 import React, { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
+import styled from 'styled-components';
 import { SHORT_TO_FULL, FULL_TO_SHORT } from '../utils/bibleLogic';
 import { bibleStorage } from '../utils/BibleStorage';
 import { supabase } from '../utils/supabaseClient';
 
 // ==========================================
-// 1. 메모(QT 노트) 에디터 컴포넌트
+// 1. 메모(QT 노트) 에디터 컴포넌트 스타일 및 컴포넌트
 // ==========================================
+const DrawerOverlay = styled.div`
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.2);
+  z-index: 90;
+  backdrop-filter: blur(1px);
+  animation: fadeIn 0.2s ease-out;
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+`;
+
+const DrawerContainer = styled.div`
+  position: fixed;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 600px;
+  background: var(--sba-modal-bg);
+  border-top: 1px solid var(--sba-border-strong);
+  border-left: 1px solid var(--sba-border-strong);
+  border-right: 1px solid var(--sba-border-strong);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 100;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: ${props => props.$isExpanded ? '310px' : '24px'};
+  cursor: ${props => props.$isExpanded ? 'default' : 'pointer'};
+  
+  &:hover {
+    border-top-color: ${props => props.$isExpanded ? 'var(--sba-border-strong)' : 'var(--sba-text-muted)'};
+  }
+`;
+
+const CompactHandle = styled.div`
+  width: 100%;
+  height: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--sba-text-secondary);
+  font-size: 0.75rem;
+  user-select: none;
+  transition: color 0.2s;
+  
+  &:hover {
+    color: var(--sba-text);
+  }
+`;
+
+const DrawerHeader = styled.div`
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 8px 20px 10px;
+  border-bottom: 1px solid var(--sba-border);
+`;
+
+const HeaderTitle = styled.h3`
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--sba-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const StatusBadge = styled.span`
+  font-size: 0.7rem;
+  color: var(--sba-text-secondary);
+  background: var(--sba-card-sub-bg);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+  border: 1px solid var(--sba-border);
+`;
+
+const CardButton = styled.button`
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--sba-border-strong);
+  color: var(--sba-text);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: var(--sba-card-sub-bg);
+    border-color: var(--sba-text-muted);
+  }
+`;
+
+const CloseIconButton = styled.button`
+  background: none;
+  border: none;
+  color: var(--sba-text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  
+  &:hover {
+    color: var(--sba-text);
+    background: var(--sba-card-sub-bg);
+  }
+`;
+
+const TextareaWrapper = styled.div`
+  padding: 16px 20px 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+`;
+
+const StyledTextarea = styled.textarea`
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  padding: 12px;
+  background: var(--sba-bg);
+  color: var(--sba-text);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  
+  &:focus {
+    border-color: var(--sba-text);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
+  }
+`;
+
 function NoteEditor({ targetDate, session, passage, verses }) {
   const [content, setContent] = useState('');
-  const [saveStatus, setSaveStatus] = useState('저장 완료'); // '저장 완료', '저장 중...', '저장 오류'
+  const [saveStatus, setSaveStatus] = useState('저장 완료');
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const timerRef = useRef(null);
   const isDirtyRef = useRef(false);
 
   const dateStr = targetDate.toISOString().split('T')[0];
 
-  // 날짜 변경 시 로컬 및 클라우드에서 메모 읽어오기
   useEffect(() => {
-    // 먼저 로컬 스토리지 확인
     let localVal = '';
     try {
       const raw = localStorage.getItem('sba_qt_notes');
@@ -33,7 +185,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
     setSaveStatus('저장 완료');
     isDirtyRef.current = false;
 
-    // 만약 로그인되어 있으면 클라우드에서 최신 데이터 패치 후 갱신
     if (session) {
       supabase
         .from('qt_notes')
@@ -44,7 +195,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
         .then(({ data, error }) => {
           if (data && !isDirtyRef.current) {
             setContent(data.content || '');
-            // 로컬 스토리지도 갱신
             try {
               const raw = localStorage.getItem('sba_qt_notes');
               const parsed = raw ? JSON.parse(raw) : {};
@@ -61,12 +211,10 @@ function NoteEditor({ targetDate, session, passage, verses }) {
     }
   }, [dateStr, session]);
 
-  // 메모 저장 수행 함수
   const saveNote = async (text) => {
     setSaveStatus('저장 중...');
     const now = new Date().toISOString();
 
-    // 1. 로컬 저장
     try {
       const raw = localStorage.getItem('sba_qt_notes');
       const parsed = raw ? JSON.parse(raw) : {};
@@ -81,7 +229,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
       return;
     }
 
-    // 2. 로그인되어 있다면 클라우드 저장
     if (session) {
       try {
         const { error } = await supabase
@@ -105,7 +252,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
     isDirtyRef.current = false;
   };
 
-  // 입력 핸들러 및 5초 Autosave 구현
   const handleChange = (e) => {
     const val = e.target.value;
     setContent(val);
@@ -114,7 +260,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
 
     if (timerRef.current) clearTimeout(timerRef.current);
     
-    // 5초 타이머 작동
     timerRef.current = setTimeout(() => {
       if (isDirtyRef.current) {
         saveNote(val);
@@ -122,7 +267,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
     }, 5000);
   };
 
-  // 컴포넌트 언마운트 혹은 날짜 변경 시 즉시 저장
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -132,7 +276,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
     };
   }, [content]);
 
-  // 포커스 아웃(블러) 시 즉시 저장
   const handleBlur = () => {
     if (isDirtyRef.current) {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -141,30 +284,63 @@ function NoteEditor({ targetDate, session, passage, verses }) {
   };
 
   return (
-    <div className="sba-note-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <h3 style={{ margin: 0 }}>오늘의 메모 (QT 노트)</h3>
-        {verses && (
-          <button 
-            onClick={() => setIsImageModalOpen(true)}
-            className="sba-action-link"
-            style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--sba-primary)', cursor: 'pointer', fontWeight: 'bold' }}
-          >
-            🎨 말씀 카드 만들기
-          </button>
+    <>
+      {isExpanded && <DrawerOverlay onClick={() => setIsExpanded(false)} />}
+
+      <DrawerContainer $isExpanded={isExpanded} onClick={!isExpanded ? () => setIsExpanded(true) : undefined}>
+        {!isExpanded ? (
+          <CompactHandle>▲</CompactHandle>
+        ) : (
+          <>
+            <div 
+              onClick={() => setIsExpanded(false)}
+              style={{
+                width: '100%',
+                height: '12px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                cursor: 'pointer',
+                paddingTop: '6px'
+              }}
+            >
+              <div style={{
+                width: '32px',
+                height: '4px',
+                borderRadius: '2px',
+                background: 'var(--sba-border-strong)'
+              }} />
+            </div>
+
+            <DrawerHeader>
+              <HeaderTitle>
+                오늘의 메모
+                <StatusBadge>{saveStatus}</StatusBadge>
+              </HeaderTitle>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {verses && (
+                  <CardButton onClick={() => setIsImageModalOpen(true)}>
+                    🎨 말씀 카드
+                  </CardButton>
+                )}
+                <CloseIconButton onClick={() => setIsExpanded(false)}>
+                  ▼
+                </CloseIconButton>
+              </div>
+            </DrawerHeader>
+
+            <TextareaWrapper>
+              <StyledTextarea
+                placeholder="오늘 말씀에서 깨달은 은혜와 묵상 내용을 기록해 보세요..."
+                value={content}
+                onChange={handleChange}
+                onBlur={handleBlur}
+              />
+            </TextareaWrapper>
+          </>
         )}
-      </div>
-      <textarea
-        className="sba-note-textarea"
-        placeholder="오늘 말씀에서 깨달은 은혜와 묵상 내용을 기록해 보세요..."
-        value={content}
-        onChange={handleChange}
-        onBlur={handleBlur}
-      />
-      <div className="sba-note-status">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>
-        <span>{saveStatus}</span>
-      </div>
+      </DrawerContainer>
 
       <ImageCardModal 
         isOpen={isImageModalOpen} 
@@ -172,7 +348,7 @@ function NoteEditor({ targetDate, session, passage, verses }) {
         passage={passage} 
         verses={verses} 
       />
-    </div>
+    </>
   );
 }
 
@@ -619,11 +795,216 @@ export function TabBookmarks({ onNavigateToVerse, updateTrigger }) {
 }
 
 // ==========================================
-// 6. SharingTab (나눔 탭 + 로딩 스켈레톤 및 예외처리)
+// 6. SharingTab (자체 묵상 나눔 피드 및 댓글 피드 + 관리자 삭제 지원) - shadcn/ui 스타일 적용
 // ==========================================
-// ==========================================
-// 6. SharingTab (자체 묵상 나눔 피드 및 댓글 피드 + 관리자 삭제 지원)
-// ==========================================
+const SharingCard = styled.div`
+  background: var(--sba-card-bg);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
+`;
+
+const SharingTitle = styled.h3`
+  margin: 0 0 16px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--sba-text);
+`;
+
+const GuestNotice = styled.div`
+  background: var(--sba-card-sub-bg);
+  border: 1px dashed var(--sba-border-strong);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--sba-text-secondary);
+  transition: all 0.2s;
+  
+  &:hover {
+    border-color: var(--sba-text-muted);
+    background: var(--sba-card-active);
+  }
+`;
+
+const StyledInput = styled.input`
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--sba-bg);
+  color: var(--sba-text);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.2s;
+  
+  &:focus {
+    border-color: var(--sba-text);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
+  }
+`;
+
+const OutlinedButton = styled.button`
+  background: transparent;
+  border: 1px solid var(--sba-border-strong);
+  color: var(--sba-text);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  
+  &:hover {
+    background: var(--sba-card-sub-bg);
+    border-color: var(--sba-text-muted);
+  }
+`;
+
+const SolidButton = styled.button`
+  background: var(--sba-text);
+  color: var(--sba-bg);
+  border: 1px solid var(--sba-text);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  
+  &:hover {
+    opacity: 0.9;
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const FeedCard = styled.div`
+  background: var(--sba-card-bg);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const FeedHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--sba-border);
+  padding-bottom: 10px;
+`;
+
+const AuthorInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+`;
+
+const AuthorName = styled.span`
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--sba-text);
+`;
+
+const PostTime = styled.span`
+  font-size: 0.75rem;
+  color: var(--sba-text-muted);
+`;
+
+const PassageBadge = styled.span`
+  font-size: 0.75rem;
+  background: var(--sba-card-sub-bg);
+  color: var(--sba-text-secondary);
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-weight: 600;
+  border: 1px solid var(--sba-border-strong);
+`;
+
+const FeedContent = styled.div`
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--sba-text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 4px 0;
+`;
+
+const ActionSection = styled.div`
+  display: flex;
+  gap: 16px;
+  border-top: 1px solid var(--sba-border);
+  padding-top: 10px;
+  font-size: 0.85rem;
+`;
+
+const ActionButton = styled.button`
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: ${props => props.$active ? '#ef4444' : 'var(--sba-text-secondary)'};
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: transform 0.1s ease;
+  
+  &:active {
+    transform: scale(0.95);
+  }
+`;
+
+const CommentSection = styled.div`
+  border-top: 1px solid var(--sba-border);
+  margin-top: 8px;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const CommentBox = styled.div`
+  background: var(--sba-card-sub-bg);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  border: 1px solid var(--sba-border);
+`;
+
+const CommentHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+`;
+
+const CommentAuthor = styled.span`
+  font-weight: 600;
+  color: var(--sba-text);
+`;
+
+const CommentTime = styled.span`
+  font-size: 0.7rem;
+  color: var(--sba-text-muted);
+  margin-right: 6px;
+`;
+
+const CommentContent = styled.div`
+  color: var(--sba-text-secondary);
+  white-space: pre-wrap;
+  line-height: 1.4;
+`;
+
 export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const [reflections, setReflections] = useState([]);
   const [comments, setComments] = useState({}); // { reflectionId: [] }
@@ -637,17 +1018,14 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
 
   const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
 
-  // 오늘 날짜 계산
   const getTodayDateStr = () => {
     const d = new Date();
-    // 오전 5시 기준 변경 정책 적용
     if (d.getHours() < 5) d.setDate(d.getDate() - 1);
     return d.toISOString().split('T')[0];
   };
 
   const todayStr = getTodayDateStr();
 
-  // 1. 나눔 글 목록 가져오기
   const loadReflections = async () => {
     setLoading(true);
     try {
@@ -659,7 +1037,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
       if (error) throw error;
       setReflections(data || []);
 
-      // 각 글의 댓글 수 및 좋아요 수 초기화
       if (data) {
         data.forEach(async (r) => {
           await loadComments(r.id);
@@ -674,7 +1051,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 2. 특정 글의 댓글 패치
   const loadComments = async (reflectionId) => {
     try {
       const { data, error } = await supabase
@@ -690,7 +1066,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 3. 특정 글의 좋아요 상태 패치
   const loadLikes = async (reflectionId) => {
     try {
       const { data: list, error } = await supabase
@@ -715,7 +1090,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     loadReflections();
   }, [session]);
 
-  // 내 오늘 메모 가져오기
   const handleImportMemo = () => {
     if (!session) {
       addToast('로그인이 필요한 기능입니다.');
@@ -738,7 +1112,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 글 등록
   const handleSubmitReflection = async (e) => {
     e.preventDefault();
     if (!session) {
@@ -782,7 +1155,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 댓글 등록
   const handleSubmitComment = async (reflectionId) => {
     if (!session) {
       addToast('로그인이 필요한 기능입니다.');
@@ -814,7 +1186,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 좋아요 토글
   const handleToggleLike = async (reflectionId) => {
     if (!session) {
       addToast('로그인이 필요한 기능입니다.');
@@ -825,7 +1196,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     
     try {
       if (currentLike.liked) {
-        // 좋아요 취소
         const { error } = await supabase
           .from('qt_likes')
           .delete()
@@ -838,7 +1208,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
           [reflectionId]: { count: Math.max(0, currentLike.count - 1), liked: false }
         }));
       } else {
-        // 좋아요 추가
         const { error } = await supabase
           .from('qt_likes')
           .insert({
@@ -857,7 +1226,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 게시물 삭제 (관리자 또는 본인)
   const handleDeleteReflection = async (id) => {
     if (!confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
     try {
@@ -875,7 +1243,6 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 댓글 삭제 (관리자 또는 본인)
   const handleDeleteComment = async (commentId, reflectionId) => {
     if (!confirm('정말로 이 댓글을 삭제하시겠습니까?')) return;
     try {
@@ -896,67 +1263,49 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   return (
     <div className="sba-tab-content">
       {/* 묵상 작성 폼 */}
-      <div className="sba-sharing-write-box">
-        <h3 style={{ margin: '0 0 12px 0' }}>오늘의 묵상 공유하기</h3>
+      <SharingCard>
+        <SharingTitle>오늘의 묵상 공유하기</SharingTitle>
         
         {!session ? (
-          <div 
-            onClick={onOpenAuthModal}
-            style={{
-              background: 'var(--sba-card-sub-bg)',
-              border: '1px dashed var(--sba-border)',
-              borderRadius: '8px',
-              padding: '24px',
-              textAlign: 'center',
-              cursor: 'pointer',
-              color: 'var(--sba-text-secondary)'
-            }}
-          >
+          <GuestNotice onClick={onOpenAuthModal}>
             🔒 묵상 나눔은 로그인이 필요한 기능입니다.<br />
             <span style={{ fontSize: '0.8rem', color: 'var(--sba-primary)', fontWeight: 'bold', textDecoration: 'underline' }}>
               소셜 로그인으로 1초 만에 로그인하기
             </span>
-          </div>
+          </GuestNotice>
         ) : (
           <form onSubmit={handleSubmitReflection} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <input 
+              <StyledInput 
                 type="text" 
-                className="sba-input"
-                style={{ flex: 1, margin: 0 }}
                 placeholder="예: 마태복음 1:1"
                 value={passage}
                 onChange={e => setPassage(e.target.value)}
               />
-              <button 
+              <OutlinedButton 
                 type="button" 
-                className="sba-btn" 
-                style={{ marginTop: 0, padding: '0 12px', fontSize: '0.85rem', whiteSpace: 'nowrap', background: 'var(--sba-card-sub-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border)' }}
                 onClick={handleImportMemo}
               >
                 ✏️ 내 메모 긁어오기
-              </button>
+              </OutlinedButton>
             </div>
             
-            <textarea 
-              className="sba-note-textarea"
-              style={{ minHeight: '80px', margin: 0 }}
+            <StyledTextarea 
+              style={{ minHeight: '80px' }}
               placeholder="오늘 나에게 주신 은혜와 결단한 점을 나누어 보세요..."
               value={content}
               onChange={e => setContent(e.target.value)}
             />
             
-            <button 
+            <SolidButton 
               type="submit" 
-              className="sba-btn" 
-              style={{ marginTop: 0, background: 'var(--sba-text)', color: 'var(--sba-bg)' }}
               disabled={submitting}
             >
               {submitting ? '공유 중...' : '피드에 공유하기'}
-            </button>
+            </SolidButton>
           </form>
         )}
-      </div>
+      </SharingCard>
 
       <h2 className="sba-verse-title" style={{ borderLeft: 'none', margin: '24px 0 16px 0' }}>지체들의 나눔</h2>
 
@@ -964,7 +1313,7 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
       {loading ? (
         <div className="sba-loading">피드를 로딩하는 중...</div>
       ) : reflections.length === 0 ? (
-        <div className="sba-empty-state">아직 오늘 작성된 묵션 나눔이 없습니다. 첫 번째 묵상 나눔을 남겨주세요!</div>
+        <div className="sba-empty-state">아직 오늘 작성된 묵상 나눔이 없습니다. 첫 번째 묵상 나눔을 남겨주세요!</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {reflections.map(r => {
@@ -975,68 +1324,115 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
             const showDelete = isMyPost || isAdmin;
 
             return (
-              <div key={r.id} className="sba-weekly-card" style={{ cursor: 'default' }}>
-                <div className="sba-weekly-card-header" style={{ borderBottom: '1px solid var(--sba-border)', paddingBottom: '8px', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{r.author_name}</span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--sba-text-subtle)' }}>
+              <FeedCard key={r.id}>
+                <FeedHeader>
+                  <AuthorInfo>
+                    <AuthorName>{r.author_name}</AuthorName>
+                    <PostTime>
                       {new Date(r.created_at).toLocaleDateString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
+                    </PostTime>
+                  </AuthorInfo>
                   
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '0.8rem', background: 'var(--sba-card-sub-bg)', color: 'var(--sba-primary)', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
-                      {r.passage}
-                    </span>
+                    <PassageBadge>{r.passage}</PassageBadge>
                     {showDelete && (
                       <button 
                         onClick={() => handleDeleteReflection(r.id)}
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', padding: '2px' }}
+                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', padding: '2px', display: 'flex', alignItems: 'center' }}
                         title="삭제"
                       >
                         🗑️
                       </button>
                     )}
                   </div>
-                </div>
+                </FeedHeader>
 
-                <div style={{ fontSize: '0.95rem', lineHeight: '1.6', color: 'var(--sba-text)', whiteSpace: 'pre-wrap', margin: '12px 0' }}>
-                  {r.content}
-                </div>
+                <FeedContent>{r.content}</FeedContent>
 
                 {/* 반응 영역 */}
-                <div style={{ display: 'flex', gap: '16px', borderTop: '1px solid var(--sba-border)', paddingTop: '8px', fontSize: '0.85rem' }}>
-                  <button 
+                <ActionSection>
+                  <ActionButton 
                     onClick={() => handleToggleLike(r.id)}
-                    style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '4px', color: hasLiked ? '#ef4444' : 'var(--sba-text-secondary)', cursor: 'pointer' }}
+                    $active={hasLiked}
                   >
                     <span>{hasLiked ? '❤️' : '🤍'}</span>
                     <span>{likeCount}</span>
-                  </button>
+                  </ActionButton>
                   
-                  <button 
+                  <ActionButton 
                     onClick={() => setActiveCommentId(activeCommentId === r.id ? null : r.id)}
-                    style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--sba-text-secondary)', cursor: 'pointer' }}
                   >
                     <span>💬</span>
                     <span>{refComments.length}</span>
-                  </button>
-                </div>
+                  </ActionButton>
+                </ActionSection>
 
                 {/* 댓글 아코디언 */}
                 {activeCommentId === r.id && (
-                  <div style={{ borderTop: '1px solid var(--sba-border)', marginTop: '10px', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <CommentSection>
                     {refComments.map(c => {
                       const isMyComment = session?.user?.id === c.user_id;
                       const showCommentDelete = isMyComment || isAdmin;
 
                       return (
-                        <div key={c.id} style={{ background: 'var(--sba-card-sub-bg)', padding: '8px 12px', borderRadius: '6px', fontSize: '0.85rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                            <span style={{ fontWeight: 'bold' }}>{c.author_name}</span>
+                        <CommentBox key={c.id}>
+                          <CommentHeader>
+                            <CommentAuthor>{c.author_name}</CommentAuthor>
                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-subtle)' }}>
+                              <CommentTime>
                                 {new Date(c.created_at).toLocaleDateString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                              </CommentTime>
+                              {showCommentDelete && (
+                                <button 
+                                  onClick={() => handleDeleteComment(c.id, r.id)}
+                                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: 0 }}
+                                >
+                                  ❌
+                                </button>
+                              )}
+                            </div>
+                          </CommentHeader>
+                          <CommentContent>{c.content}</CommentContent>
+                        </CommentBox>
+                      );
+                    })}
+
+                    {/* 댓글 쓰기 */}
+                    {!session ? (
+                      <div 
+                        onClick={onOpenAuthModal}
+                        style={{ fontSize: '0.8rem', textAlign: 'center', color: 'var(--sba-primary)', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
+                      >
+                        댓글 작성을 위해 로그인해 주세요.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                        <StyledInput 
+                          type="text" 
+                          style={{ fontSize: '0.85rem', padding: '8px 12px' }}
+                          placeholder="댓글을 입력해 주세요..."
+                          value={newCommentText[r.id] || ''}
+                          onChange={e => setNewCommentText(prev => ({ ...prev, [r.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') handleSubmitComment(r.id); }}
+                        />
+                        <OutlinedButton 
+                          style={{ padding: '8px 16px' }}
+                          onClick={() => handleSubmitComment(r.id)}
+                        >
+                          등록
+                        </OutlinedButton>
+                      </div>
+                    )}
+                  </CommentSection>
+                )}
+              </FeedCard>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}-KR', { hour: '2-digit', minute: '2-digit' })}
                               </span>
                               {showCommentDelete && (
                                 <button 

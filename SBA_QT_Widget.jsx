@@ -44,10 +44,10 @@ const SbaStyledWrapper = styled.div`
     --sba-verse-title: #222;
     --sba-verse-text: #333;
     --sba-verse-num: #6a737b;
-    --sba-splash-bg: #fdfcfb;
-    --sba-splash-title: #111;
-    --sba-splash-sub: #555;
-    --sba-splash-desc: #777;
+    --sba-splash-bg: #fafafa;
+    --sba-splash-title: #09090b;
+    --sba-splash-sub: #71717a;
+    --sba-splash-desc: #a1a1aa;
     --sba-highlight: rgba(245, 158, 11, 0.25);
     --sba-highlight-hover: rgba(245, 158, 11, 0.4);
     --sba-skeleton-bg: #e1e4e8;
@@ -63,7 +63,7 @@ const SbaStyledWrapper = styled.div`
     flex-direction: column;
     box-shadow: 0 4px 20px rgba(0,0,0,0.05);
     position: relative;
-    padding-bottom: 70px; /* Space for bottom nav */
+    padding-bottom: 105px; /* Space for bottom nav (70px) + closed NoteEditor drawer (24px) + margin */
     transition: background-color 0.3s, color 0.3s;
 }
 
@@ -94,10 +94,10 @@ const SbaStyledWrapper = styled.div`
     --sba-verse-title: #ffffff;
     --sba-verse-text: #cccccc;
     --sba-verse-num: #888888;
-    --sba-splash-bg: #121212;
-    --sba-splash-title: #ffffff;
-    --sba-splash-sub: #aaaaaa;
-    --sba-splash-desc: #777777;
+    --sba-splash-bg: #09090b;
+    --sba-splash-title: #fafafa;
+    --sba-splash-sub: #a1a1aa;
+    --sba-splash-desc: #71717a;
     --sba-highlight: rgba(245, 158, 11, 0.4);
     --sba-highlight-hover: rgba(245, 158, 11, 0.55);
     --sba-skeleton-bg: #2d2d2d;
@@ -410,7 +410,7 @@ const SbaStyledWrapper = styled.div`
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    transition: opacity 0.8s ease-in-out, visibility 0.8s;
+    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.6s;
 }
 
 .sba-splash-screen.fade-out {
@@ -420,40 +420,45 @@ const SbaStyledWrapper = styled.div`
 
 .sba-splash-content {
     text-align: center;
-    animation: fadeInSplash 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    animation: fadeInSplash 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .sba-splash-main-title {
-    font-size: 4.0rem;
+    font-size: 2.5rem;
     font-weight: 800;
     color: var(--sba-splash-title);
-    margin-bottom: 15px;
-    letter-spacing: -2px;
-    line-height: 1.1;
+    margin: 0;
+    letter-spacing: -0.05em;
+    line-height: 1.2;
     word-break: keep-all;
 }
 
 .sba-splash-sub-title {
-    font-size: 2.4rem;
+    font-size: 1.5rem;
     font-weight: 500;
     color: var(--sba-splash-sub);
-    margin-top: 0px;
-    margin-bottom: 30px;
-    letter-spacing: -1px;
+    margin: 0;
+    letter-spacing: -0.03em;
     line-height: 1.2;
 }
 
 .sba-splash-desc {
-    font-size: 1rem;
+    font-size: 0.875rem;
     color: var(--sba-splash-desc);
+    margin-top: 16px;
+    letter-spacing: -0.01em;
 }
 
 .sba-splash-footer {
     position: absolute;
     bottom: 40px;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     color: var(--sba-text-subtle);
-    animation: fadeInSplash 1s ease-out forwards;
+    letter-spacing: 0.05em;
+    animation: fadeInSplash 1.2s ease-out forwards;
 }
 
 @keyframes fadeInSplash {
@@ -1241,20 +1246,171 @@ function AppFooter() {
 
 
 // ==========================================
-// 1. 메모(QT 노트) 에디터 컴포넌트
+// 1. 메모(QT 노트) 에디터 컴포넌트 스타일 및 컴포넌트
 // ==========================================
+const DrawerOverlay = styled.div`
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.2);
+  z-index: 90;
+  backdrop-filter: blur(1px);
+  animation: fadeIn 0.2s ease-out;
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+`;
+
+const DrawerContainer = styled.div`
+  position: fixed;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 600px;
+  background: var(--sba-modal-bg);
+  border-top: 1px solid var(--sba-border-strong);
+  border-left: 1px solid var(--sba-border-strong);
+  border-right: 1px solid var(--sba-border-strong);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 100;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: ${props => props.$isExpanded ? '310px' : '24px'};
+  cursor: ${props => props.$isExpanded ? 'default' : 'pointer'};
+  
+  &:hover {
+    border-top-color: ${props => props.$isExpanded ? 'var(--sba-border-strong)' : 'var(--sba-text-muted)'};
+  }
+`;
+
+const CompactHandle = styled.div`
+  width: 100%;
+  height: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--sba-text-secondary);
+  font-size: 0.75rem;
+  user-select: none;
+  transition: color 0.2s;
+  
+  &:hover {
+    color: var(--sba-text);
+  }
+`;
+
+const DrawerHeader = styled.div`
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 8px 20px 10px;
+  border-bottom: 1px solid var(--sba-border);
+`;
+
+const HeaderTitle = styled.h3`
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--sba-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const StatusBadge = styled.span`
+  font-size: 0.7rem;
+  color: var(--sba-text-secondary);
+  background: var(--sba-card-sub-bg);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+  border: 1px solid var(--sba-border);
+`;
+
+const CardButton = styled.button`
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--sba-border-strong);
+  color: var(--sba-text);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: var(--sba-card-sub-bg);
+    border-color: var(--sba-text-muted);
+  }
+`;
+
+const CloseIconButton = styled.button`
+  background: none;
+  border: none;
+  color: var(--sba-text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  
+  &:hover {
+    color: var(--sba-text);
+    background: var(--sba-card-sub-bg);
+  }
+`;
+
+const TextareaWrapper = styled.div`
+  padding: 16px 20px 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+`;
+
+const StyledTextarea = styled.textarea`
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  padding: 12px;
+  background: var(--sba-bg);
+  color: var(--sba-text);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  
+  &:focus {
+    border-color: var(--sba-text);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
+  }
+`;
+
 function NoteEditor({ targetDate, session, passage, verses }) {
   const [content, setContent] = useState('');
-  const [saveStatus, setSaveStatus] = useState('저장 완료'); // '저장 완료', '저장 중...', '저장 오류'
+  const [saveStatus, setSaveStatus] = useState('저장 완료');
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const timerRef = useRef(null);
   const isDirtyRef = useRef(false);
 
   const dateStr = targetDate.toISOString().split('T')[0];
 
-  // 날짜 변경 시 로컬 및 클라우드에서 메모 읽어오기
   useEffect(() => {
-    // 먼저 로컬 스토리지 확인
     let localVal = '';
     try {
       const raw = localStorage.getItem('sba_qt_notes');
@@ -1269,7 +1425,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
     setSaveStatus('저장 완료');
     isDirtyRef.current = false;
 
-    // 만약 로그인되어 있으면 클라우드에서 최신 데이터 패치 후 갱신
     if (session) {
       supabase
         .from('qt_notes')
@@ -1280,7 +1435,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
         .then(({ data, error }) => {
           if (data && !isDirtyRef.current) {
             setContent(data.content || '');
-            // 로컬 스토리지도 갱신
             try {
               const raw = localStorage.getItem('sba_qt_notes');
               const parsed = raw ? JSON.parse(raw) : {};
@@ -1297,12 +1451,10 @@ function NoteEditor({ targetDate, session, passage, verses }) {
     }
   }, [dateStr, session]);
 
-  // 메모 저장 수행 함수
   const saveNote = async (text) => {
     setSaveStatus('저장 중...');
     const now = new Date().toISOString();
 
-    // 1. 로컬 저장
     try {
       const raw = localStorage.getItem('sba_qt_notes');
       const parsed = raw ? JSON.parse(raw) : {};
@@ -1317,7 +1469,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
       return;
     }
 
-    // 2. 로그인되어 있다면 클라우드 저장
     if (session) {
       try {
         const { error } = await supabase
@@ -1341,7 +1492,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
     isDirtyRef.current = false;
   };
 
-  // 입력 핸들러 및 5초 Autosave 구현
   const handleChange = (e) => {
     const val = e.target.value;
     setContent(val);
@@ -1350,7 +1500,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
 
     if (timerRef.current) clearTimeout(timerRef.current);
     
-    // 5초 타이머 작동
     timerRef.current = setTimeout(() => {
       if (isDirtyRef.current) {
         saveNote(val);
@@ -1358,7 +1507,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
     }, 5000);
   };
 
-  // 컴포넌트 언마운트 혹은 날짜 변경 시 즉시 저장
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -1368,7 +1516,6 @@ function NoteEditor({ targetDate, session, passage, verses }) {
     };
   }, [content]);
 
-  // 포커스 아웃(블러) 시 즉시 저장
   const handleBlur = () => {
     if (isDirtyRef.current) {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -1377,30 +1524,63 @@ function NoteEditor({ targetDate, session, passage, verses }) {
   };
 
   return (
-    <div className="sba-note-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <h3 style={{ margin: 0 }}>오늘의 메모 (QT 노트)</h3>
-        {verses && (
-          <button 
-            onClick={() => setIsImageModalOpen(true)}
-            className="sba-action-link"
-            style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--sba-primary)', cursor: 'pointer', fontWeight: 'bold' }}
-          >
-            🎨 말씀 카드 만들기
-          </button>
+    <>
+      {isExpanded && <DrawerOverlay onClick={() => setIsExpanded(false)} />}
+
+      <DrawerContainer $isExpanded={isExpanded} onClick={!isExpanded ? () => setIsExpanded(true) : undefined}>
+        {!isExpanded ? (
+          <CompactHandle>▲</CompactHandle>
+        ) : (
+          <>
+            <div 
+              onClick={() => setIsExpanded(false)}
+              style={{
+                width: '100%',
+                height: '12px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                cursor: 'pointer',
+                paddingTop: '6px'
+              }}
+            >
+              <div style={{
+                width: '32px',
+                height: '4px',
+                borderRadius: '2px',
+                background: 'var(--sba-border-strong)'
+              }} />
+            </div>
+
+            <DrawerHeader>
+              <HeaderTitle>
+                오늘의 메모
+                <StatusBadge>{saveStatus}</StatusBadge>
+              </HeaderTitle>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {verses && (
+                  <CardButton onClick={() => setIsImageModalOpen(true)}>
+                    🎨 말씀 카드
+                  </CardButton>
+                )}
+                <CloseIconButton onClick={() => setIsExpanded(false)}>
+                  ▼
+                </CloseIconButton>
+              </div>
+            </DrawerHeader>
+
+            <TextareaWrapper>
+              <StyledTextarea
+                placeholder="오늘 말씀에서 깨달은 은혜와 묵상 내용을 기록해 보세요..."
+                value={content}
+                onChange={handleChange}
+                onBlur={handleBlur}
+              />
+            </TextareaWrapper>
+          </>
         )}
-      </div>
-      <textarea
-        className="sba-note-textarea"
-        placeholder="오늘 말씀에서 깨달은 은혜와 묵상 내용을 기록해 보세요..."
-        value={content}
-        onChange={handleChange}
-        onBlur={handleBlur}
-      />
-      <div className="sba-note-status">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>
-        <span>{saveStatus}</span>
-      </div>
+      </DrawerContainer>
 
       <ImageCardModal 
         isOpen={isImageModalOpen} 
@@ -1408,7 +1588,7 @@ function NoteEditor({ targetDate, session, passage, verses }) {
         passage={passage} 
         verses={verses} 
       />
-    </div>
+    </>
   );
 }
 
@@ -1855,11 +2035,216 @@ function TabBookmarks({ onNavigateToVerse, updateTrigger }) {
 }
 
 // ==========================================
-// 6. SharingTab (나눔 탭 + 로딩 스켈레톤 및 예외처리)
+// 6. SharingTab (자체 묵상 나눔 피드 및 댓글 피드 + 관리자 삭제 지원) - shadcn/ui 스타일 적용
 // ==========================================
-// ==========================================
-// 6. SharingTab (자체 묵상 나눔 피드 및 댓글 피드 + 관리자 삭제 지원)
-// ==========================================
+const SharingCard = styled.div`
+  background: var(--sba-card-bg);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
+`;
+
+const SharingTitle = styled.h3`
+  margin: 0 0 16px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--sba-text);
+`;
+
+const GuestNotice = styled.div`
+  background: var(--sba-card-sub-bg);
+  border: 1px dashed var(--sba-border-strong);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--sba-text-secondary);
+  transition: all 0.2s;
+  
+  &:hover {
+    border-color: var(--sba-text-muted);
+    background: var(--sba-card-active);
+  }
+`;
+
+const StyledInput = styled.input`
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--sba-bg);
+  color: var(--sba-text);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.2s;
+  
+  &:focus {
+    border-color: var(--sba-text);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
+  }
+`;
+
+const OutlinedButton = styled.button`
+  background: transparent;
+  border: 1px solid var(--sba-border-strong);
+  color: var(--sba-text);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  
+  &:hover {
+    background: var(--sba-card-sub-bg);
+    border-color: var(--sba-text-muted);
+  }
+`;
+
+const SolidButton = styled.button`
+  background: var(--sba-text);
+  color: var(--sba-bg);
+  border: 1px solid var(--sba-text);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  
+  &:hover {
+    opacity: 0.9;
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const FeedCard = styled.div`
+  background: var(--sba-card-bg);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const FeedHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--sba-border);
+  padding-bottom: 10px;
+`;
+
+const AuthorInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+`;
+
+const AuthorName = styled.span`
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--sba-text);
+`;
+
+const PostTime = styled.span`
+  font-size: 0.75rem;
+  color: var(--sba-text-muted);
+`;
+
+const PassageBadge = styled.span`
+  font-size: 0.75rem;
+  background: var(--sba-card-sub-bg);
+  color: var(--sba-text-secondary);
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-weight: 600;
+  border: 1px solid var(--sba-border-strong);
+`;
+
+const FeedContent = styled.div`
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--sba-text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 4px 0;
+`;
+
+const ActionSection = styled.div`
+  display: flex;
+  gap: 16px;
+  border-top: 1px solid var(--sba-border);
+  padding-top: 10px;
+  font-size: 0.85rem;
+`;
+
+const ActionButton = styled.button`
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: ${props => props.$active ? '#ef4444' : 'var(--sba-text-secondary)'};
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: transform 0.1s ease;
+  
+  &:active {
+    transform: scale(0.95);
+  }
+`;
+
+const CommentSection = styled.div`
+  border-top: 1px solid var(--sba-border);
+  margin-top: 8px;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const CommentBox = styled.div`
+  background: var(--sba-card-sub-bg);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  border: 1px solid var(--sba-border);
+`;
+
+const CommentHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+`;
+
+const CommentAuthor = styled.span`
+  font-weight: 600;
+  color: var(--sba-text);
+`;
+
+const CommentTime = styled.span`
+  font-size: 0.7rem;
+  color: var(--sba-text-muted);
+  margin-right: 6px;
+`;
+
+const CommentContent = styled.div`
+  color: var(--sba-text-secondary);
+  white-space: pre-wrap;
+  line-height: 1.4;
+`;
+
 function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const [reflections, setReflections] = useState([]);
   const [comments, setComments] = useState({}); // { reflectionId: [] }
@@ -1873,17 +2258,14 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
 
   const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
 
-  // 오늘 날짜 계산
   const getTodayDateStr = () => {
     const d = new Date();
-    // 오전 5시 기준 변경 정책 적용
     if (d.getHours() < 5) d.setDate(d.getDate() - 1);
     return d.toISOString().split('T')[0];
   };
 
   const todayStr = getTodayDateStr();
 
-  // 1. 나눔 글 목록 가져오기
   const loadReflections = async () => {
     setLoading(true);
     try {
@@ -1895,7 +2277,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
       if (error) throw error;
       setReflections(data || []);
 
-      // 각 글의 댓글 수 및 좋아요 수 초기화
       if (data) {
         data.forEach(async (r) => {
           await loadComments(r.id);
@@ -1910,7 +2291,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 2. 특정 글의 댓글 패치
   const loadComments = async (reflectionId) => {
     try {
       const { data, error } = await supabase
@@ -1926,7 +2306,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 3. 특정 글의 좋아요 상태 패치
   const loadLikes = async (reflectionId) => {
     try {
       const { data: list, error } = await supabase
@@ -1951,7 +2330,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     loadReflections();
   }, [session]);
 
-  // 내 오늘 메모 가져오기
   const handleImportMemo = () => {
     if (!session) {
       addToast('로그인이 필요한 기능입니다.');
@@ -1974,7 +2352,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 글 등록
   const handleSubmitReflection = async (e) => {
     e.preventDefault();
     if (!session) {
@@ -2018,7 +2395,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 댓글 등록
   const handleSubmitComment = async (reflectionId) => {
     if (!session) {
       addToast('로그인이 필요한 기능입니다.');
@@ -2050,7 +2426,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 좋아요 토글
   const handleToggleLike = async (reflectionId) => {
     if (!session) {
       addToast('로그인이 필요한 기능입니다.');
@@ -2061,7 +2436,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     
     try {
       if (currentLike.liked) {
-        // 좋아요 취소
         const { error } = await supabase
           .from('qt_likes')
           .delete()
@@ -2074,7 +2448,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
           [reflectionId]: { count: Math.max(0, currentLike.count - 1), liked: false }
         }));
       } else {
-        // 좋아요 추가
         const { error } = await supabase
           .from('qt_likes')
           .insert({
@@ -2093,7 +2466,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 게시물 삭제 (관리자 또는 본인)
   const handleDeleteReflection = async (id) => {
     if (!confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
     try {
@@ -2111,7 +2483,6 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
     }
   };
 
-  // 댓글 삭제 (관리자 또는 본인)
   const handleDeleteComment = async (commentId, reflectionId) => {
     if (!confirm('정말로 이 댓글을 삭제하시겠습니까?')) return;
     try {
@@ -2132,67 +2503,49 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   return (
     <div className="sba-tab-content">
       {/* 묵상 작성 폼 */}
-      <div className="sba-sharing-write-box">
-        <h3 style={{ margin: '0 0 12px 0' }}>오늘의 묵상 공유하기</h3>
+      <SharingCard>
+        <SharingTitle>오늘의 묵상 공유하기</SharingTitle>
         
         {!session ? (
-          <div 
-            onClick={onOpenAuthModal}
-            style={{
-              background: 'var(--sba-card-sub-bg)',
-              border: '1px dashed var(--sba-border)',
-              borderRadius: '8px',
-              padding: '24px',
-              textAlign: 'center',
-              cursor: 'pointer',
-              color: 'var(--sba-text-secondary)'
-            }}
-          >
+          <GuestNotice onClick={onOpenAuthModal}>
             🔒 묵상 나눔은 로그인이 필요한 기능입니다.<br />
             <span style={{ fontSize: '0.8rem', color: 'var(--sba-primary)', fontWeight: 'bold', textDecoration: 'underline' }}>
               소셜 로그인으로 1초 만에 로그인하기
             </span>
-          </div>
+          </GuestNotice>
         ) : (
           <form onSubmit={handleSubmitReflection} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <input 
+              <StyledInput 
                 type="text" 
-                className="sba-input"
-                style={{ flex: 1, margin: 0 }}
                 placeholder="예: 마태복음 1:1"
                 value={passage}
                 onChange={e => setPassage(e.target.value)}
               />
-              <button 
+              <OutlinedButton 
                 type="button" 
-                className="sba-btn" 
-                style={{ marginTop: 0, padding: '0 12px', fontSize: '0.85rem', whiteSpace: 'nowrap', background: 'var(--sba-card-sub-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border)' }}
                 onClick={handleImportMemo}
               >
                 ✏️ 내 메모 긁어오기
-              </button>
+              </OutlinedButton>
             </div>
             
-            <textarea 
-              className="sba-note-textarea"
-              style={{ minHeight: '80px', margin: 0 }}
+            <StyledTextarea 
+              style={{ minHeight: '80px' }}
               placeholder="오늘 나에게 주신 은혜와 결단한 점을 나누어 보세요..."
               value={content}
               onChange={e => setContent(e.target.value)}
             />
             
-            <button 
+            <SolidButton 
               type="submit" 
-              className="sba-btn" 
-              style={{ marginTop: 0, background: 'var(--sba-text)', color: 'var(--sba-bg)' }}
               disabled={submitting}
             >
               {submitting ? '공유 중...' : '피드에 공유하기'}
-            </button>
+            </SolidButton>
           </form>
         )}
-      </div>
+      </SharingCard>
 
       <h2 className="sba-verse-title" style={{ borderLeft: 'none', margin: '24px 0 16px 0' }}>지체들의 나눔</h2>
 
@@ -2200,7 +2553,7 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
       {loading ? (
         <div className="sba-loading">피드를 로딩하는 중...</div>
       ) : reflections.length === 0 ? (
-        <div className="sba-empty-state">아직 오늘 작성된 묵션 나눔이 없습니다. 첫 번째 묵상 나눔을 남겨주세요!</div>
+        <div className="sba-empty-state">아직 오늘 작성된 묵상 나눔이 없습니다. 첫 번째 묵상 나눔을 남겨주세요!</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {reflections.map(r => {
@@ -2211,68 +2564,115 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
             const showDelete = isMyPost || isAdmin;
 
             return (
-              <div key={r.id} className="sba-weekly-card" style={{ cursor: 'default' }}>
-                <div className="sba-weekly-card-header" style={{ borderBottom: '1px solid var(--sba-border)', paddingBottom: '8px', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{r.author_name}</span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--sba-text-subtle)' }}>
+              <FeedCard key={r.id}>
+                <FeedHeader>
+                  <AuthorInfo>
+                    <AuthorName>{r.author_name}</AuthorName>
+                    <PostTime>
                       {new Date(r.created_at).toLocaleDateString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
+                    </PostTime>
+                  </AuthorInfo>
                   
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '0.8rem', background: 'var(--sba-card-sub-bg)', color: 'var(--sba-primary)', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
-                      {r.passage}
-                    </span>
+                    <PassageBadge>{r.passage}</PassageBadge>
                     {showDelete && (
                       <button 
                         onClick={() => handleDeleteReflection(r.id)}
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', padding: '2px' }}
+                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', padding: '2px', display: 'flex', alignItems: 'center' }}
                         title="삭제"
                       >
                         🗑️
                       </button>
                     )}
                   </div>
-                </div>
+                </FeedHeader>
 
-                <div style={{ fontSize: '0.95rem', lineHeight: '1.6', color: 'var(--sba-text)', whiteSpace: 'pre-wrap', margin: '12px 0' }}>
-                  {r.content}
-                </div>
+                <FeedContent>{r.content}</FeedContent>
 
                 {/* 반응 영역 */}
-                <div style={{ display: 'flex', gap: '16px', borderTop: '1px solid var(--sba-border)', paddingTop: '8px', fontSize: '0.85rem' }}>
-                  <button 
+                <ActionSection>
+                  <ActionButton 
                     onClick={() => handleToggleLike(r.id)}
-                    style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '4px', color: hasLiked ? '#ef4444' : 'var(--sba-text-secondary)', cursor: 'pointer' }}
+                    $active={hasLiked}
                   >
                     <span>{hasLiked ? '❤️' : '🤍'}</span>
                     <span>{likeCount}</span>
-                  </button>
+                  </ActionButton>
                   
-                  <button 
+                  <ActionButton 
                     onClick={() => setActiveCommentId(activeCommentId === r.id ? null : r.id)}
-                    style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--sba-text-secondary)', cursor: 'pointer' }}
                   >
                     <span>💬</span>
                     <span>{refComments.length}</span>
-                  </button>
-                </div>
+                  </ActionButton>
+                </ActionSection>
 
                 {/* 댓글 아코디언 */}
                 {activeCommentId === r.id && (
-                  <div style={{ borderTop: '1px solid var(--sba-border)', marginTop: '10px', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <CommentSection>
                     {refComments.map(c => {
                       const isMyComment = session?.user?.id === c.user_id;
                       const showCommentDelete = isMyComment || isAdmin;
 
                       return (
-                        <div key={c.id} style={{ background: 'var(--sba-card-sub-bg)', padding: '8px 12px', borderRadius: '6px', fontSize: '0.85rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                            <span style={{ fontWeight: 'bold' }}>{c.author_name}</span>
+                        <CommentBox key={c.id}>
+                          <CommentHeader>
+                            <CommentAuthor>{c.author_name}</CommentAuthor>
                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-subtle)' }}>
+                              <CommentTime>
                                 {new Date(c.created_at).toLocaleDateString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                              </CommentTime>
+                              {showCommentDelete && (
+                                <button 
+                                  onClick={() => handleDeleteComment(c.id, r.id)}
+                                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: 0 }}
+                                >
+                                  ❌
+                                </button>
+                              )}
+                            </div>
+                          </CommentHeader>
+                          <CommentContent>{c.content}</CommentContent>
+                        </CommentBox>
+                      );
+                    })}
+
+                    {/* 댓글 쓰기 */}
+                    {!session ? (
+                      <div 
+                        onClick={onOpenAuthModal}
+                        style={{ fontSize: '0.8rem', textAlign: 'center', color: 'var(--sba-primary)', cursor: 'pointer', textDecoration: 'underline', padding: '8px' }}
+                      >
+                        댓글 작성을 위해 로그인해 주세요.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                        <StyledInput 
+                          type="text" 
+                          style={{ fontSize: '0.85rem', padding: '8px 12px' }}
+                          placeholder="댓글을 입력해 주세요..."
+                          value={newCommentText[r.id] || ''}
+                          onChange={e => setNewCommentText(prev => ({ ...prev, [r.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') handleSubmitComment(r.id); }}
+                        />
+                        <OutlinedButton 
+                          style={{ padding: '8px 16px' }}
+                          onClick={() => handleSubmitComment(r.id)}
+                        >
+                          등록
+                        </OutlinedButton>
+                      </div>
+                    )}
+                  </CommentSection>
+                )}
+              </FeedCard>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}-KR', { hour: '2-digit', minute: '2-digit' })}
                               </span>
                               {showCommentDelete && (
                                 <button 
@@ -2486,6 +2886,151 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
 
 
 // ==========================================
+// 0. Animations & Common Modal Components (shadcn/ui Style)
+// ==========================================
+const fadeIn = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
+`;
+
+const slideUp = keyframes`
+  from { transform: scale(0.95) translateY(10px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+`;
+
+const ModalOverlay = styled.div`
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ${fadeIn} 0.2s ease-out;
+`;
+
+const ModalContent = styled.div`
+  background: var(--sba-modal-bg);
+  color: var(--sba-text);
+  padding: 24px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: ${props => props.$maxWidth || '400px'};
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--sba-border-strong);
+  position: relative;
+  animation: ${slideUp} 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+`;
+
+const ModalHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--sba-border);
+  padding-bottom: 12px;
+`;
+
+const ModalTitle = styled.h3`
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--sba-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const ModalCloseButton = styled.button`
+  background: none;
+  border: none;
+  color: var(--sba-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  
+  &:hover {
+    color: var(--sba-text);
+    background: var(--sba-card-sub-bg);
+  }
+`;
+
+const FormGroup = styled.div`
+  margin-bottom: 16px;
+  text-align: left;
+`;
+
+const FormLabel = styled.label`
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--sba-text-secondary);
+  margin-bottom: 6px;
+`;
+
+const FormInput = styled.input`
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--sba-bg);
+  color: var(--sba-text);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: all 0.2s;
+  
+  &:focus {
+    border-color: var(--sba-text);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
+  }
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+`;
+
+const ShadButton = styled.button`
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid ${props => props.$variant === 'outline' ? 'var(--sba-border-strong)' : 'transparent'};
+  background: ${props => {
+    if (props.$variant === 'outline') return 'transparent';
+    if (props.$variant === 'accent') return '#d97706';
+    return 'var(--sba-text)';
+  }};
+  color: ${props => {
+    if (props.$variant === 'outline') return 'var(--sba-text)';
+    if (props.$variant === 'accent') return '#fff';
+    return 'var(--sba-bg)';
+  }};
+
+  &:hover {
+    opacity: 0.9;
+    background: ${props => {
+      if (props.$variant === 'outline') return 'var(--sba-card-sub-bg)';
+      return undefined;
+    }};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+// ==========================================
 // 1. TabWeekly (주간 탭)
 // ==========================================
 function TabWeekly({ dailyPlans, currentDate, onCardClick }) {
@@ -2589,42 +3134,123 @@ function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, addToast }
     };
 
     return (
-        <div className="sba-modal-overlay" onClick={onClose}>
-            <div className="sba-modal-content" onClick={e => e.stopPropagation()}>
-                <h3 style={{marginTop: 0, borderBottom: '1px solid var(--sba-border)', paddingBottom: '10px'}}>관리자 설정 (Admin)</h3>
-                <p style={{fontSize: '0.9rem', color: 'var(--sba-text-secondary)'}}>큐티 기준일 변경 및 시트 캐시 초기화</p>
-                <div style={{marginTop: '16px'}}>
-                    <label style={{display: 'block', marginBottom: '4px', fontWeight: 'bold', fontSize: '0.9rem'}}>시작 기준일 (localStorage)</label>
-                    <input 
+        <ModalOverlay onClick={onClose}>
+            <ModalContent onClick={e => e.stopPropagation()}>
+                <ModalHeader>
+                    <ModalTitle>관리자 설정 (Admin)</ModalTitle>
+                    <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                </ModalHeader>
+                <p style={{fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 16px'}}>
+                    큐티 기준일 변경 및 시트 캐시 초기화
+                </p>
+                
+                <FormGroup>
+                    <FormLabel>시작 기준일 (localStorage)</FormLabel>
+                    <FormInput 
                         type="date" 
                         value={startDateStr} 
                         onChange={e => setStartDateStr(e.target.value)}
-                        className="sba-input"
                     />
-                </div>
-                <div style={{marginTop: '16px'}}>
-                    <label style={{display: 'block', marginBottom: '4px', fontWeight: 'bold', fontSize: '0.9rem'}}>Purge 관리자 토큰</label>
-                    <input 
+                </FormGroup>
+                
+                <FormGroup>
+                    <FormLabel>Purge 관리자 토큰</FormLabel>
+                    <FormInput 
                         type="password" 
                         value={token} 
                         onChange={e => setToken(e.target.value)}
-                        className="sba-input"
                     />
-                </div>
-                <button className="sba-btn" onClick={handleSync} disabled={syncing} style={{background: '#d97706', color: '#fff'}}>
-                    {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
-                </button>
-                <button className="sba-btn" onClick={onClose}>
-                    닫기 및 저장
-                </button>
-            </div>
-        </div>
+                </FormGroup>
+                
+                <ButtonGroup style={{ flexDirection: 'column', gap: '10px' }}>
+                    <ShadButton $variant="accent" onClick={handleSync} disabled={syncing}>
+                        {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
+                    </ShadButton>
+                    <ShadButton $variant="outline" onClick={onClose}>
+                        닫기 및 저장
+                    </ShadButton>
+                </ButtonGroup>
+            </ModalContent>
+        </ModalOverlay>
     );
 }
 
 // ==========================================
-// 3. CalendarModal (커스텀 달력 모달 - 펜 아이콘 렌더링 지원)
+// 3. CalendarModal (커스텀 달력 모달)
 // ==========================================
+const CalendarHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+`;
+
+const CalendarTitleText = styled.span`
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--sba-text);
+`;
+
+const CalendarNavButton = styled.button`
+  background: none;
+  border: none;
+  color: var(--sba-text);
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: var(--sba-card-sub-bg);
+  }
+`;
+
+const CalendarGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  row-gap: 8px;
+  column-gap: 4px;
+  text-align: center;
+`;
+
+const WeekdayHeader = styled.span`
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding-bottom: 8px;
+  color: ${props => props.$isSunday ? '#ef4444' : props.$isSaturday ? '#3b82f6' : 'var(--sba-text-muted)'};
+`;
+
+const CalendarDayCell = styled.div`
+  padding: 8px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+  font-size: 0.85rem;
+  font-weight: ${props => props.$isSelected ? '600' : 'normal'};
+  background: ${props => props.$isSelected ? 'var(--sba-text)' : 'transparent'};
+  color: ${props => props.$isSelected ? 'var(--sba-bg)' : 'var(--sba-text)'};
+  transition: all 0.2s;
+  
+  &:hover {
+    background: ${props => props.$isSelected ? 'var(--sba-text)' : 'var(--sba-card-sub-bg)'};
+  }
+`;
+
+const NoteIndicator = styled.span`
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: ${props => props.$isSelected ? 'var(--sba-bg)' : 'var(--sba-text-secondary)'};
+`;
+
 function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
     const [noteDates, setNoteDates] = useState(new Set());
     const [viewDate, setViewDate] = useState(new Date(currentDate));
@@ -2632,7 +3258,6 @@ function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
     if (!isOpen) return null;
 
     useEffect(() => {
-        // 로컬스토리지에서 메모가 있는 날짜 목록 파싱
         try {
             const raw = localStorage.getItem('sba_qt_notes');
             if (raw) {
@@ -2652,17 +3277,13 @@ function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
     
-    // 이달의 첫 요일
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = getDaysInMonth(year, month);
     
-    // 달력 칸 생성
     const days = [];
-    // 빈칸 채우기
     for (let i = 0; i < firstDayIndex; i++) {
         days.push(null);
     }
-    // 날짜 채우기
     for (let i = 1; i <= daysInMonth; i++) {
         days.push(new Date(year, month, i));
     }
@@ -2682,29 +3303,27 @@ function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
     };
 
     return (
-        <div className="sba-modal-overlay" onClick={onClose}>
-            <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '350px'}}>
-                <h3 style={{marginTop: 0, marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <span>날짜 이동</span>
-                    <span style={{fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--sba-text-secondary)'}}>✏️ 메모 있음</span>
-                </h3>
+        <ModalOverlay onClick={onClose}>
+            <ModalContent onClick={e => e.stopPropagation()} $maxWidth="360px">
+                <ModalHeader>
+                    <ModalTitle>
+                        날짜 이동
+                        <span style={{fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--sba-text-muted)'}}>• 점(·) 표시: 메모 있음</span>
+                    </ModalTitle>
+                    <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                </ModalHeader>
                 
-                {/* 캘린더 네비게이션 */}
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
-                    <button onClick={prevMonth} style={{background: 'none', border: 'none', color: 'var(--sba-text)', cursor: 'pointer', padding: '4px 8px', fontSize: '1rem'}}>◀</button>
-                    <span style={{fontWeight: 'bold', fontSize: '1.1rem'}}>{year}년 {month + 1}월</span>
-                    <button onClick={nextMonth} style={{background: 'none', border: 'none', color: 'var(--sba-text)', cursor: 'pointer', padding: '4px 8px', fontSize: '1rem'}}>▶</button>
-                </div>
+                <CalendarHeader>
+                    <CalendarNavButton onClick={prevMonth}>◀</CalendarNavButton>
+                    <CalendarTitleText>{year}년 {month + 1}월</CalendarTitleText>
+                    <CalendarNavButton onClick={nextMonth}>▶</CalendarNavButton>
+                </CalendarHeader>
 
-                {/* 캘린더 요일 헤더 */}
-                <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '8px'}}>
+                <CalendarGrid>
                     {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
-                        <span key={d} style={{color: i === 0 ? '#ef4444' : i === 6 ? '#3b82f6' : 'var(--sba-text-secondary)'}}>{d}</span>
+                        <WeekdayHeader key={d} $isSunday={i === 0} $isSaturday={i === 6}>{d}</WeekdayHeader>
                     ))}
-                </div>
-
-                {/* 캘린더 그리드 */}
-                <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', rowGap: '6px', textAlign: 'center'}}>
+                    
                     {days.map((date, idx) => {
                         if (!date) return <div key={`empty-${idx}`} />;
                         
@@ -2713,58 +3332,71 @@ function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
                         const hasNote = noteDates.has(dateStr);
                         
                         return (
-                            <div 
+                            <CalendarDayCell 
                                 key={dateStr}
                                 onClick={() => handleSelectDate(date)}
-                                style={{
-                                    padding: '6px 0',
-                                    borderRadius: '50%',
-                                    cursor: 'pointer',
-                                    position: 'relative',
-                                    fontSize: '0.9rem',
-                                    background: isSelected ? 'var(--sba-text)' : 'transparent',
-                                    color: isSelected ? 'var(--sba-bg)' : 'var(--sba-text)',
-                                    fontWeight: isSelected ? 'bold' : 'normal',
-                                }}
+                                $isSelected={isSelected}
                             >
                                 {date.getDate()}
-                                {hasNote && !isSelected && (
-                                    <span style={{
-                                        position: 'absolute',
-                                        bottom: '1px',
-                                        left: '50%',
-                                        transform: 'translateX(-50%)',
-                                        fontSize: '0.5rem'
-                                    }}>✏️</span>
+                                {hasNote && (
+                                    <NoteIndicator $isSelected={isSelected} />
                                 )}
-                            </div>
+                            </CalendarDayCell>
                         );
                     })}
-                </div>
+                </CalendarGrid>
 
-                <div style={{display: 'flex', gap: '8px', marginTop: '16px'}}>
-                    <button 
-                        className="sba-btn" 
-                        style={{marginTop: 0, flex: 1, background: 'var(--sba-card-sub-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border)'}}
+                <ButtonGroup>
+                    <ShadButton 
+                        $variant="outline"
                         onClick={() => {
                             onSetDate(getEffectiveDate());
                             onClose();
                         }}
                     >
                         오늘 날짜로 복귀
-                    </button>
-                    <button className="sba-btn" style={{marginTop: 0, flex: 1}} onClick={onClose}>
+                    </ShadButton>
+                    <ShadButton onClick={onClose}>
                         취소
-                    </button>
-                </div>
-            </div>
-        </div>
+                    </ShadButton>
+                </ButtonGroup>
+            </ModalContent>
+        </ModalOverlay>
     );
 }
 
 // ==========================================
-// 4. AuthModal (소셜 로그인 모달 - 신설)
+// 4. AuthModal (소셜 로그인 모달)
 // ==========================================
+const SocialButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  border: ${props => props.$provider === 'google' ? '1px solid var(--sba-border-strong)' : 'none'};
+  background: ${props => props.$provider === 'google' ? 'var(--sba-modal-bg)' : '#fee500'};
+  color: ${props => props.$provider === 'google' ? 'var(--sba-text)' : '#191919'};
+  
+  &:hover {
+    background: ${props => props.$provider === 'google' ? 'var(--sba-card-sub-bg)' : '#fdd835'};
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
 function AuthModal({ isOpen, onClose, addToast }) {
     if (!isOpen) return null;
 
@@ -2784,28 +3416,34 @@ function AuthModal({ isOpen, onClose, addToast }) {
     };
 
     return (
-        <div className="sba-modal-overlay" onClick={onClose}>
-            <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{textAlign: 'center'}}>
-                <h3 style={{marginTop: 0, borderBottom: '1px solid var(--sba-border)', paddingBottom: '10px'}}>로그인</h3>
-                <p style={{fontSize: '0.9rem', color: 'var(--sba-text-secondary)', marginBottom: '24px'}}>
+        <ModalOverlay onClick={onClose}>
+            <ModalContent onClick={e => e.stopPropagation()} style={{textAlign: 'center'}} $maxWidth="380px">
+                <ModalHeader>
+                    <ModalTitle style={{ margin: '0 auto' }}>로그인</ModalTitle>
+                    <ModalCloseButton onClick={onClose} style={{ position: 'absolute', right: '16px', top: '16px' }}>✕</ModalCloseButton>
+                </ModalHeader>
+                <p style={{fontSize: '0.875rem', color: 'var(--sba-text-secondary)', lineHeight: '1.5', margin: '0 0 24px'}}>
                     소셜 로그인으로 로그인하시면 작성하신 북마크와 메모가 안전하게 클라우드에 백업되어 다른 기기에서도 자유롭게 연동됩니다.
                 </p>
                 
-                <button className="sba-auth-btn google" onClick={() => handleOAuthLogin('google')}>
+                <SocialButton $provider="google" onClick={() => handleOAuthLogin('google')}>
                     <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5.04c1.74 0 3.3.6 4.53 1.78l3.38-3.38C17.86 1.54 15.17 1 12 1 7.24 1 3.2 3.82 1.34 7.92l3.96 3.07C6.26 7.63 8.92 5.04 12 5.04z"/><path fill="#4285F4" d="M23.49 12.27c0-.82-.07-1.61-.21-2.38H12v4.51h6.44c-.28 1.48-1.12 2.73-2.38 3.58l3.69 2.87c2.16-2 3.74-4.94 3.74-8.58z"/><path fill="#FBBC05" d="M5.3 14.79a7.16 7.16 0 0 1 0-4.54L1.34 7.18a11.96 11.96 0 0 0 0 9.64l3.96-3.03z"/><path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.69-2.87c-1.02.68-2.33 1.09-4.27 1.09-3.08 0-5.74-2.59-6.7-5.96L1.34 15.38C3.2 19.48 7.24 23 12 23z"/></svg>
                     Google로 시작하기
-                </button>
+                </SocialButton>
                 
-                <button className="sba-auth-btn kakao" onClick={() => handleOAuthLogin('kakao')}>
+                <SocialButton $provider="kakao" onClick={() => handleOAuthLogin('kakao')}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-4.97 0-9 3.185-9 7.11 0 2.507 1.644 4.717 4.148 5.918-.173.65-.626 2.34-.716 2.684-.112.433.155.427.327.311.135-.09 2.148-1.464 3.003-2.046C10.428 17.054 11.2 17.11 12 17.11c4.97 0 9-3.185 9-7.11C21 6.185 16.97 3 12 3z"/></svg>
                     카카오로 시작하기
-                </button>
+                </SocialButton>
 
-                <p style={{fontSize: '0.8rem', color: 'var(--sba-text-muted)', marginTop: '20px', textDecoration: 'underline', cursor: 'pointer'}} onClick={onClose}>
+                <p 
+                    style={{fontSize: '0.8rem', color: 'var(--sba-text-muted)', marginTop: '24px', textDecoration: 'underline', cursor: 'pointer', display: 'inline-block'}} 
+                    onClick={onClose}
+                >
                     로그인 없이 계속 사용하기 (로컬 저장)
                 </p>
-            </div>
-        </div>
+            </ModalContent>
+        </ModalOverlay>
     );
 }
 

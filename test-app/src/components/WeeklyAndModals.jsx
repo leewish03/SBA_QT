@@ -1,6 +1,152 @@
 import React, { useState, useEffect } from 'react';
+import styled, { keyframes } from 'styled-components';
 import { calcQtDays, getEffectiveDate, SHORT_TO_FULL } from '../utils/bibleLogic';
 import { supabase } from '../utils/supabaseClient';
+
+// ==========================================
+// 0. Animations & Common Modal Components (shadcn/ui Style)
+// ==========================================
+const fadeIn = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
+`;
+
+const slideUp = keyframes`
+  from { transform: scale(0.95) translateY(10px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+`;
+
+const ModalOverlay = styled.div`
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ${fadeIn} 0.2s ease-out;
+`;
+
+const ModalContent = styled.div`
+  background: var(--sba-modal-bg);
+  color: var(--sba-text);
+  padding: 24px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: ${props => props.$maxWidth || '400px'};
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--sba-border-strong);
+  position: relative;
+  animation: ${slideUp} 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+`;
+
+const ModalHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--sba-border);
+  padding-bottom: 12px;
+`;
+
+const ModalTitle = styled.h3`
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--sba-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const ModalCloseButton = styled.button`
+  background: none;
+  border: none;
+  color: var(--sba-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  
+  &:hover {
+    color: var(--sba-text);
+    background: var(--sba-card-sub-bg);
+  }
+`;
+
+const FormGroup = styled.div`
+  margin-bottom: 16px;
+  text-align: left;
+`;
+
+const FormLabel = styled.label`
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--sba-text-secondary);
+  margin-bottom: 6px;
+`;
+
+const FormInput = styled.input`
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--sba-bg);
+  color: var(--sba-text);
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: all 0.2s;
+  
+  &:focus {
+    border-color: var(--sba-text);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
+  }
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+`;
+
+const ShadButton = styled.button`
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid ${props => props.$variant === 'outline' ? 'var(--sba-border-strong)' : 'transparent'};
+  background: ${props => {
+    if (props.$variant === 'outline') return 'transparent';
+    if (props.$variant === 'accent') return '#d97706';
+    return 'var(--sba-text)';
+  }};
+  color: ${props => {
+    if (props.$variant === 'outline') return 'var(--sba-text)';
+    if (props.$variant === 'accent') return '#fff';
+    return 'var(--sba-bg)';
+  }};
+
+  &:hover {
+    opacity: 0.9;
+    background: ${props => {
+      if (props.$variant === 'outline') return 'var(--sba-card-sub-bg)';
+      return undefined;
+    }};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
 
 // ==========================================
 // 1. TabWeekly (주간 탭)
@@ -106,42 +252,123 @@ export function AdminModal({ isOpen, onClose, startDateStr, setStartDateStr, add
     };
 
     return (
-        <div className="sba-modal-overlay" onClick={onClose}>
-            <div className="sba-modal-content" onClick={e => e.stopPropagation()}>
-                <h3 style={{marginTop: 0, borderBottom: '1px solid var(--sba-border)', paddingBottom: '10px'}}>관리자 설정 (Admin)</h3>
-                <p style={{fontSize: '0.9rem', color: 'var(--sba-text-secondary)'}}>큐티 기준일 변경 및 시트 캐시 초기화</p>
-                <div style={{marginTop: '16px'}}>
-                    <label style={{display: 'block', marginBottom: '4px', fontWeight: 'bold', fontSize: '0.9rem'}}>시작 기준일 (localStorage)</label>
-                    <input 
+        <ModalOverlay onClick={onClose}>
+            <ModalContent onClick={e => e.stopPropagation()}>
+                <ModalHeader>
+                    <ModalTitle>관리자 설정 (Admin)</ModalTitle>
+                    <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                </ModalHeader>
+                <p style={{fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 16px'}}>
+                    큐티 기준일 변경 및 시트 캐시 초기화
+                </p>
+                
+                <FormGroup>
+                    <FormLabel>시작 기준일 (localStorage)</FormLabel>
+                    <FormInput 
                         type="date" 
                         value={startDateStr} 
                         onChange={e => setStartDateStr(e.target.value)}
-                        className="sba-input"
                     />
-                </div>
-                <div style={{marginTop: '16px'}}>
-                    <label style={{display: 'block', marginBottom: '4px', fontWeight: 'bold', fontSize: '0.9rem'}}>Purge 관리자 토큰</label>
-                    <input 
+                </FormGroup>
+                
+                <FormGroup>
+                    <FormLabel>Purge 관리자 토큰</FormLabel>
+                    <FormInput 
                         type="password" 
                         value={token} 
                         onChange={e => setToken(e.target.value)}
-                        className="sba-input"
                     />
-                </div>
-                <button className="sba-btn" onClick={handleSync} disabled={syncing} style={{background: '#d97706', color: '#fff'}}>
-                    {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
-                </button>
-                <button className="sba-btn" onClick={onClose}>
-                    닫기 및 저장
-                </button>
-            </div>
-        </div>
+                </FormGroup>
+                
+                <ButtonGroup style={{ flexDirection: 'column', gap: '10px' }}>
+                    <ShadButton $variant="accent" onClick={handleSync} disabled={syncing}>
+                        {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
+                    </ShadButton>
+                    <ShadButton $variant="outline" onClick={onClose}>
+                        닫기 및 저장
+                    </ShadButton>
+                </ButtonGroup>
+            </ModalContent>
+        </ModalOverlay>
     );
 }
 
 // ==========================================
-// 3. CalendarModal (커스텀 달력 모달 - 펜 아이콘 렌더링 지원)
+// 3. CalendarModal (커스텀 달력 모달)
 // ==========================================
+const CalendarHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+`;
+
+const CalendarTitleText = styled.span`
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--sba-text);
+`;
+
+const CalendarNavButton = styled.button`
+  background: none;
+  border: none;
+  color: var(--sba-text);
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: var(--sba-card-sub-bg);
+  }
+`;
+
+const CalendarGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  row-gap: 8px;
+  column-gap: 4px;
+  text-align: center;
+`;
+
+const WeekdayHeader = styled.span`
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding-bottom: 8px;
+  color: ${props => props.$isSunday ? '#ef4444' : props.$isSaturday ? '#3b82f6' : 'var(--sba-text-muted)'};
+`;
+
+const CalendarDayCell = styled.div`
+  padding: 8px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+  font-size: 0.85rem;
+  font-weight: ${props => props.$isSelected ? '600' : 'normal'};
+  background: ${props => props.$isSelected ? 'var(--sba-text)' : 'transparent'};
+  color: ${props => props.$isSelected ? 'var(--sba-bg)' : 'var(--sba-text)'};
+  transition: all 0.2s;
+  
+  &:hover {
+    background: ${props => props.$isSelected ? 'var(--sba-text)' : 'var(--sba-card-sub-bg)'};
+  }
+`;
+
+const NoteIndicator = styled.span`
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: ${props => props.$isSelected ? 'var(--sba-bg)' : 'var(--sba-text-secondary)'};
+`;
+
 export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
     const [noteDates, setNoteDates] = useState(new Set());
     const [viewDate, setViewDate] = useState(new Date(currentDate));
@@ -149,7 +376,6 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
     if (!isOpen) return null;
 
     useEffect(() => {
-        // 로컬스토리지에서 메모가 있는 날짜 목록 파싱
         try {
             const raw = localStorage.getItem('sba_qt_notes');
             if (raw) {
@@ -169,17 +395,13 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
     
-    // 이달의 첫 요일
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = getDaysInMonth(year, month);
     
-    // 달력 칸 생성
     const days = [];
-    // 빈칸 채우기
     for (let i = 0; i < firstDayIndex; i++) {
         days.push(null);
     }
-    // 날짜 채우기
     for (let i = 1; i <= daysInMonth; i++) {
         days.push(new Date(year, month, i));
     }
@@ -199,29 +421,27 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
     };
 
     return (
-        <div className="sba-modal-overlay" onClick={onClose}>
-            <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '350px'}}>
-                <h3 style={{marginTop: 0, marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <span>날짜 이동</span>
-                    <span style={{fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--sba-text-secondary)'}}>✏️ 메모 있음</span>
-                </h3>
+        <ModalOverlay onClick={onClose}>
+            <ModalContent onClick={e => e.stopPropagation()} $maxWidth="360px">
+                <ModalHeader>
+                    <ModalTitle>
+                        날짜 이동
+                        <span style={{fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--sba-text-muted)'}}>• 점(·) 표시: 메모 있음</span>
+                    </ModalTitle>
+                    <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                </ModalHeader>
                 
-                {/* 캘린더 네비게이션 */}
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
-                    <button onClick={prevMonth} style={{background: 'none', border: 'none', color: 'var(--sba-text)', cursor: 'pointer', padding: '4px 8px', fontSize: '1rem'}}>◀</button>
-                    <span style={{fontWeight: 'bold', fontSize: '1.1rem'}}>{year}년 {month + 1}월</span>
-                    <button onClick={nextMonth} style={{background: 'none', border: 'none', color: 'var(--sba-text)', cursor: 'pointer', padding: '4px 8px', fontSize: '1rem'}}>▶</button>
-                </div>
+                <CalendarHeader>
+                    <CalendarNavButton onClick={prevMonth}>◀</CalendarNavButton>
+                    <CalendarTitleText>{year}년 {month + 1}월</CalendarTitleText>
+                    <CalendarNavButton onClick={nextMonth}>▶</CalendarNavButton>
+                </CalendarHeader>
 
-                {/* 캘린더 요일 헤더 */}
-                <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '8px'}}>
+                <CalendarGrid>
                     {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
-                        <span key={d} style={{color: i === 0 ? '#ef4444' : i === 6 ? '#3b82f6' : 'var(--sba-text-secondary)'}}>{d}</span>
+                        <WeekdayHeader key={d} $isSunday={i === 0} $isSaturday={i === 6}>{d}</WeekdayHeader>
                     ))}
-                </div>
-
-                {/* 캘린더 그리드 */}
-                <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', rowGap: '6px', textAlign: 'center'}}>
+                    
                     {days.map((date, idx) => {
                         if (!date) return <div key={`empty-${idx}`} />;
                         
@@ -230,58 +450,71 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
                         const hasNote = noteDates.has(dateStr);
                         
                         return (
-                            <div 
+                            <CalendarDayCell 
                                 key={dateStr}
                                 onClick={() => handleSelectDate(date)}
-                                style={{
-                                    padding: '6px 0',
-                                    borderRadius: '50%',
-                                    cursor: 'pointer',
-                                    position: 'relative',
-                                    fontSize: '0.9rem',
-                                    background: isSelected ? 'var(--sba-text)' : 'transparent',
-                                    color: isSelected ? 'var(--sba-bg)' : 'var(--sba-text)',
-                                    fontWeight: isSelected ? 'bold' : 'normal',
-                                }}
+                                $isSelected={isSelected}
                             >
                                 {date.getDate()}
-                                {hasNote && !isSelected && (
-                                    <span style={{
-                                        position: 'absolute',
-                                        bottom: '1px',
-                                        left: '50%',
-                                        transform: 'translateX(-50%)',
-                                        fontSize: '0.5rem'
-                                    }}>✏️</span>
+                                {hasNote && (
+                                    <NoteIndicator $isSelected={isSelected} />
                                 )}
-                            </div>
+                            </CalendarDayCell>
                         );
                     })}
-                </div>
+                </CalendarGrid>
 
-                <div style={{display: 'flex', gap: '8px', marginTop: '16px'}}>
-                    <button 
-                        className="sba-btn" 
-                        style={{marginTop: 0, flex: 1, background: 'var(--sba-card-sub-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border)'}}
+                <ButtonGroup>
+                    <ShadButton 
+                        $variant="outline"
                         onClick={() => {
                             onSetDate(getEffectiveDate());
                             onClose();
                         }}
                     >
                         오늘 날짜로 복귀
-                    </button>
-                    <button className="sba-btn" style={{marginTop: 0, flex: 1}} onClick={onClose}>
+                    </ShadButton>
+                    <ShadButton onClick={onClose}>
                         취소
-                    </button>
-                </div>
-            </div>
-        </div>
+                    </ShadButton>
+                </ButtonGroup>
+            </ModalContent>
+        </ModalOverlay>
     );
 }
 
 // ==========================================
-// 4. AuthModal (소셜 로그인 모달 - 신설)
+// 4. AuthModal (소셜 로그인 모달)
 // ==========================================
+const SocialButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  border: ${props => props.$provider === 'google' ? '1px solid var(--sba-border-strong)' : 'none'};
+  background: ${props => props.$provider === 'google' ? 'var(--sba-modal-bg)' : '#fee500'};
+  color: ${props => props.$provider === 'google' ? 'var(--sba-text)' : '#191919'};
+  
+  &:hover {
+    background: ${props => props.$provider === 'google' ? 'var(--sba-card-sub-bg)' : '#fdd835'};
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
 export function AuthModal({ isOpen, onClose, addToast }) {
     if (!isOpen) return null;
 
@@ -301,27 +534,33 @@ export function AuthModal({ isOpen, onClose, addToast }) {
     };
 
     return (
-        <div className="sba-modal-overlay" onClick={onClose}>
-            <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{textAlign: 'center'}}>
-                <h3 style={{marginTop: 0, borderBottom: '1px solid var(--sba-border)', paddingBottom: '10px'}}>로그인</h3>
-                <p style={{fontSize: '0.9rem', color: 'var(--sba-text-secondary)', marginBottom: '24px'}}>
+        <ModalOverlay onClick={onClose}>
+            <ModalContent onClick={e => e.stopPropagation()} style={{textAlign: 'center'}} $maxWidth="380px">
+                <ModalHeader>
+                    <ModalTitle style={{ margin: '0 auto' }}>로그인</ModalTitle>
+                    <ModalCloseButton onClick={onClose} style={{ position: 'absolute', right: '16px', top: '16px' }}>✕</ModalCloseButton>
+                </ModalHeader>
+                <p style={{fontSize: '0.875rem', color: 'var(--sba-text-secondary)', lineHeight: '1.5', margin: '0 0 24px'}}>
                     소셜 로그인으로 로그인하시면 작성하신 북마크와 메모가 안전하게 클라우드에 백업되어 다른 기기에서도 자유롭게 연동됩니다.
                 </p>
                 
-                <button className="sba-auth-btn google" onClick={() => handleOAuthLogin('google')}>
+                <SocialButton $provider="google" onClick={() => handleOAuthLogin('google')}>
                     <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5.04c1.74 0 3.3.6 4.53 1.78l3.38-3.38C17.86 1.54 15.17 1 12 1 7.24 1 3.2 3.82 1.34 7.92l3.96 3.07C6.26 7.63 8.92 5.04 12 5.04z"/><path fill="#4285F4" d="M23.49 12.27c0-.82-.07-1.61-.21-2.38H12v4.51h6.44c-.28 1.48-1.12 2.73-2.38 3.58l3.69 2.87c2.16-2 3.74-4.94 3.74-8.58z"/><path fill="#FBBC05" d="M5.3 14.79a7.16 7.16 0 0 1 0-4.54L1.34 7.18a11.96 11.96 0 0 0 0 9.64l3.96-3.03z"/><path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.69-2.87c-1.02.68-2.33 1.09-4.27 1.09-3.08 0-5.74-2.59-6.7-5.96L1.34 15.38C3.2 19.48 7.24 23 12 23z"/></svg>
                     Google로 시작하기
-                </button>
+                </SocialButton>
                 
-                <button className="sba-auth-btn kakao" onClick={() => handleOAuthLogin('kakao')}>
+                <SocialButton $provider="kakao" onClick={() => handleOAuthLogin('kakao')}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-4.97 0-9 3.185-9 7.11 0 2.507 1.644 4.717 4.148 5.918-.173.65-.626 2.34-.716 2.684-.112.433.155.427.327.311.135-.09 2.148-1.464 3.003-2.046C10.428 17.054 11.2 17.11 12 17.11c4.97 0 9-3.185 9-7.11C21 6.185 16.97 3 12 3z"/></svg>
                     카카오로 시작하기
-                </button>
+                </SocialButton>
 
-                <p style={{fontSize: '0.8rem', color: 'var(--sba-text-muted)', marginTop: '20px', textDecoration: 'underline', cursor: 'pointer'}} onClick={onClose}>
+                <p 
+                    style={{fontSize: '0.8rem', color: 'var(--sba-text-muted)', marginTop: '24px', textDecoration: 'underline', cursor: 'pointer', display: 'inline-block'}} 
+                    onClick={onClose}
+                >
                     로그인 없이 계속 사용하기 (로컬 저장)
                 </p>
-            </div>
-        </div>
+            </ModalContent>
+        </ModalOverlay>
     );
 }
