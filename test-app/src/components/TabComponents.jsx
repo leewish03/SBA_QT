@@ -2269,11 +2269,11 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
   // 글자 수에 비례하여 동적으로 폰트 크기 계산 (안 잘리고 다 들어가도록 자동 조절)
   const getFontSize = (text) => {
     const len = text.length;
-    if (len < 50) return '1.15rem';
-    if (len < 100) return '0.98rem';
-    if (len < 180) return '0.85rem';
-    if (len < 260) return '0.75rem';
-    return '0.68rem';
+    if (len < 50) return '1.05rem';
+    if (len < 100) return '0.92rem';
+    if (len < 180) return '0.80rem';
+    if (len < 260) return '0.72rem';
+    return '0.65rem';
   };
 
   const fontSize = getFontSize(verseText);
@@ -2405,8 +2405,8 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
           <div style={{ margin: '20px 0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', zIndex: 1 }}>
             <p style={{ 
               fontSize: fontSize, 
-              lineHeight: '1.8', 
-              margin: '0 0 16px 0', 
+              lineHeight: '1.65', 
+              margin: '0 0 8px 0', 
               fontWeight: '500', 
               wordBreak: 'keep-all', 
               textAlign: 'center',
