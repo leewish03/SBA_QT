@@ -370,6 +370,31 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
         return saved ? parseFloat(saved) : 17.6;
     });
 
+    // 알림 설정 상태 정의
+    const [alarmEnabled, setAlarmEnabled] = useState(() => {
+        return localStorage.getItem('sba_qt_alarm_enabled') === 'true';
+    });
+    const [alarmTime, setAlarmTime] = useState(() => {
+        return localStorage.getItem('sba_qt_alarm_time') || '08:00';
+    });
+
+    const [alarmHour, alarmMinute] = alarmTime.split(':');
+
+    // 세션이 유효할 때 클라우드 메타데이터가 변경되면 알림 상태 동기화
+    useEffect(() => {
+        if (session && session.user && session.user.user_metadata) {
+            const meta = session.user.user_metadata;
+            if (meta.sba_qt_alarm_enabled !== undefined) {
+                setAlarmEnabled(meta.sba_qt_alarm_enabled);
+                localStorage.setItem('sba_qt_alarm_enabled', String(meta.sba_qt_alarm_enabled));
+            }
+            if (meta.sba_qt_alarm_time) {
+                setAlarmTime(meta.sba_qt_alarm_time);
+                localStorage.setItem('sba_qt_alarm_time', meta.sba_qt_alarm_time);
+            }
+        }
+    }, [session]);
+
     const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
 
     const changeFontSize = (delta) => {
@@ -418,6 +443,50 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
     }, [isOpen, session]);
 
     if (!isOpen) return null;
+
+    const handleAlarmToggle = async (e) => {
+        const checked = e.target.checked;
+        if (checked) {
+            if (!('Notification' in window)) {
+                alert('이 브라우저는 알림 기능을 지원하지 않습니다.');
+                return;
+            }
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                alert('알림 권한이 거부되었습니다. 브라우저 설정에서 알림 권한을 허용해 주세요.');
+                return;
+            }
+        }
+        
+        setAlarmEnabled(checked);
+        localStorage.setItem('sba_qt_alarm_enabled', checked ? 'true' : 'false');
+        
+        if (session) {
+            await supabase.auth.updateUser({
+                data: {
+                    sba_qt_alarm_enabled: checked,
+                    sba_qt_alarm_time: alarmTime
+                }
+            });
+        }
+        addToast(checked ? '매일 QT 알림이 켜졌습니다.' : '매일 QT 알림이 꺼졌습니다.');
+    };
+
+    const handleAlarmTimeChange = async (h, m) => {
+        const newTime = `${h}:${m}`;
+        setAlarmTime(newTime);
+        localStorage.setItem('sba_qt_alarm_time', newTime);
+        
+        if (session) {
+            await supabase.auth.updateUser({
+                data: {
+                    sba_qt_alarm_enabled: alarmEnabled,
+                    sba_qt_alarm_time: newTime
+                }
+            });
+        }
+        addToast(`알림 시간이 ${h}시 ${m}분으로 변경되었습니다.`);
+    };
 
     const handleSync = async () => {
         setSyncing(true);
@@ -484,6 +553,9 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
         localStorage.removeItem('sba_qt_bookmarks');
         localStorage.removeItem('sba_qt_notes');
         localStorage.removeItem('sba_bible_font_size');
+        localStorage.removeItem('sba_qt_alarm_enabled');
+        localStorage.removeItem('sba_qt_alarm_time');
+        localStorage.removeItem('sba_qt_last_notified_date');
         addToast('로컬 데이터가 완전히 초기화되었습니다.');
         window.location.reload();
     };
@@ -521,7 +593,76 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
                     </SettingControl>
                 </SettingRow>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px' }}>
+                {/* 매일 말씀 알림 설정 */}
+                <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
+                        <b>매일 QT 알림 설정 (Notification)</b>
+                    </p>
+                    {!session ? (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--sba-text-muted)', textAlign: 'center', padding: '8px 0' }}>
+                            로그인 후 알림 설정을 사용할 수 있습니다.
+                        </div>
+                    ) : (
+                        <>
+                            <SettingRow style={{ borderBottom: 'none', padding: '8px 0' }}>
+                                <SettingLabel>알림 받기</SettingLabel>
+                                <SettingControl>
+                                    <SwitchContainer>
+                                        <SwitchInput 
+                                            type="checkbox" 
+                                            checked={alarmEnabled} 
+                                            onChange={handleAlarmToggle} 
+                                        />
+                                        <SwitchSlider />
+                                    </SwitchContainer>
+                                </SettingControl>
+                            </SettingRow>
+                            {alarmEnabled && (
+                                <SettingRow style={{ borderBottom: 'none', padding: '8px 0' }}>
+                                    <SettingLabel>알림 시간</SettingLabel>
+                                    <SettingControl style={{ gap: '6px' }}>
+                                        <select 
+                                            value={alarmHour} 
+                                            onChange={(e) => handleAlarmTimeChange(e.target.value, alarmMinute)}
+                                            style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '6px',
+                                                border: '1px solid var(--sba-border-strong)',
+                                                background: 'var(--sba-card-bg)',
+                                                color: 'var(--sba-text)',
+                                                fontSize: '0.85rem'
+                                            }}
+                                        >
+                                            {Array.from({ length: 24 }).map((_, i) => {
+                                                const h = String(i).padStart(2, '0');
+                                                return <option key={h} value={h}>{h}시</option>;
+                                            })}
+                                        </select>
+                                        <select 
+                                            value={alarmMinute} 
+                                            onChange={(e) => handleAlarmTimeChange(alarmHour, e.target.value)}
+                                            style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '6px',
+                                                border: '1px solid var(--sba-border-strong)',
+                                                background: 'var(--sba-card-bg)',
+                                                color: 'var(--sba-text)',
+                                                fontSize: '0.85rem'
+                                            }}
+                                        >
+                                            {Array.from({ length: 12 }).map((_, i) => {
+                                                const m = String(i * 5).padStart(2, '0');
+                                                return <option key={m} value={m}>{m}분</option>;
+                                            })}
+                                        </select>
+                                    </SettingControl>
+                                </SettingRow>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px', borderTop: '1px solid var(--sba-border)', paddingTop: '12px' }}>
                     <span>북마크: {stats.bookmarks}개 | 메모: {stats.notes}개</span>
                     <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 데이터 초기화</DeleteTextButton>
                 </div>

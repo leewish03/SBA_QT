@@ -2191,6 +2191,7 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
 // ==========================================
 export function ImageCardModal({ isOpen, onClose, passage, verses }) {
   const [activeTheme, setActiveTheme] = useState('hanji');
+  const [cardRatio, setCardRatio] = useState('4/5'); // '4/5' or '9/16'
   const cardRef = useRef(null);
   
   if (!isOpen) return null;
@@ -2200,8 +2201,8 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
   if (verses) {
     const verseList = Object.entries(verses);
     if (verseList.length > 0) {
-      // 모든 구절을 모아서 띄우기
-      verseText = verseList.map(([num, text]) => `${num}절 ${text}`).join(' ');
+      // 절 번호 제거하고 순수 구절 내용만 결합
+      verseText = verseList.map(([num, text]) => text.trim()).join(' ');
     }
   }
 
@@ -2328,7 +2329,7 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
         </filter>
       </svg>
 
-      <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '400px', padding: '20px'}}>
+      <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '420px', padding: '20px'}}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h3 style={{marginTop: 0, marginBottom: 0, fontSize: '1rem', fontWeight: 'bold'}}>말씀 카드 제작</h3>
           <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--sba-text-muted)' }} onClick={onClose}>✕</button>
@@ -2343,18 +2344,24 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
               radial-gradient(circle at 50% 50%, rgba(255,255,255,0.4), rgba(0,0,0,0.01)),
               url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='${currentTheme.noiseOpacity}'/%3E%3C/svg%3E")
             `,
-            padding: '36px 28px',
+            padding: cardRatio === '9/16' ? '48px 24px' : '36px 28px',
             borderRadius: '12px',
             boxShadow: '0 8px 20px rgba(0, 0, 0, 0.12)',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            aspectRatio: '4 / 5',
+            aspectRatio: cardRatio === '9/16' ? '9 / 16' : '4 / 5',
+            maxHeight: '65vh',
+            height: 'auto',
+            width: '100%',
+            maxWidth: cardRatio === '9/16' ? 'calc(65vh * 9 / 16)' : '100%',
+            margin: '0 auto',
             color: currentTheme.textColor,
-            fontFamily: "'Nanum Myeongjo', 'Georgia', serif",
+            fontFamily: "'Noto Serif KR', 'Nanum Myeongjo', 'Georgia', serif",
             position: 'relative',
             overflow: 'hidden',
-            border: `1px solid ${currentTheme.borderColor}`
+            border: `1px solid ${currentTheme.borderColor}`,
+            boxSizing: 'border-box'
           }}
         >
           {/* 장식용 프레임 라인 */}
@@ -2373,11 +2380,11 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
             SBA QT
           </div>
           
-          <div style={{ margin: '20px 0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', zIndex: 1 }}>
+          <div style={{ margin: '20px 0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', zIndex: 1 }}>
             <p style={{ 
               fontSize: fontSize, 
-              lineHeight: '1.75', 
-              margin: 0, 
+              lineHeight: '1.8', 
+              margin: '0 0 16px 0', 
               fontWeight: '500', 
               wordBreak: 'keep-all', 
               textAlign: 'center',
@@ -2385,20 +2392,64 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
             }}>
               “ {verseText} ”
             </p>
+            <div style={{
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              color: currentTheme.textColor,
+              opacity: 0.8,
+              textAlign: 'center',
+              marginTop: '8px',
+              fontStyle: 'italic'
+            }}>
+              - {passage} -
+            </div>
           </div>
 
-          <div style={{ borderTop: `1px solid ${currentTheme.borderColor}`, paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1, opacity: 0.9 }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: currentTheme.textColor }}>
-              {passage}
-            </span>
-            <span style={{ fontSize: '0.7rem', color: currentTheme.metaColor }}>
+          <div style={{ borderTop: `1px solid ${currentTheme.borderColor}`, paddingTop: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1, opacity: 0.9 }}>
+            <span style={{ fontSize: '0.7rem', color: currentTheme.metaColor, letterSpacing: '1px' }}>
               서울북부교회 청년회
             </span>
           </div>
         </div>
 
+        {/* 비율 선택 토글 */}
+        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+          <button
+            onClick={() => setCardRatio('4/5')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid var(--sba-border-strong)',
+              background: cardRatio === '4/5' ? 'var(--sba-text)' : 'var(--sba-card-sub-bg)',
+              color: cardRatio === '4/5' ? 'var(--sba-bg)' : 'var(--sba-text)',
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+              fontWeight: '600',
+              transition: 'all 0.2s'
+            }}
+          >
+            4:5 (기본)
+          </button>
+          <button
+            onClick={() => setCardRatio('9/16')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid var(--sba-border-strong)',
+              background: cardRatio === '9/16' ? 'var(--sba-text)' : 'var(--sba-card-sub-bg)',
+              color: cardRatio === '9/16' ? 'var(--sba-bg)' : 'var(--sba-text)',
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+              fontWeight: '600',
+              transition: 'all 0.2s'
+            }}
+          >
+            9:16 (인스타 스토리)
+          </button>
+        </div>
+
         {/* 테마 셀렉터 */}
-        <div style={{marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '16px'}}>
+        <div style={{marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '16px'}}>
           {Object.entries(themes).map(([key, t]) => (
             <button 
               key={key}
@@ -2422,7 +2473,7 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
         </div>
 
         {/* 하단 버튼 */}
-        <div style={{display: 'flex', gap: '8px', marginTop: '24px'}}>
+        <div style={{display: 'flex', gap: '8px', marginTop: '20px'}}>
           <button className="sba-btn" style={{flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleShare}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             공유

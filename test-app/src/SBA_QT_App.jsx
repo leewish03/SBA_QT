@@ -90,9 +90,22 @@ export default function SBA_QT_App() {
 
     // Supabase Auth 세션 감지 및 자동 동기화
     useEffect(() => {
+        const syncAlarmSettingsFromMetadata = (sess) => {
+            if (sess && sess.user && sess.user.user_metadata) {
+                const meta = sess.user.user_metadata;
+                if (meta.sba_qt_alarm_enabled !== undefined) {
+                    localStorage.setItem('sba_qt_alarm_enabled', String(meta.sba_qt_alarm_enabled));
+                }
+                if (meta.sba_qt_alarm_time) {
+                    localStorage.setItem('sba_qt_alarm_time', meta.sba_qt_alarm_time);
+                }
+            }
+        };
+
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
             if (session) {
+                syncAlarmSettingsFromMetadata(session);
                 syncLocalDataToCloud().then((res) => {
                     if (res.success) {
                         addToast('소셜 클라우드와 북마크/메모가 동기화되었습니다.');
@@ -105,6 +118,7 @@ export default function SBA_QT_App() {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
             if (session) {
+                syncAlarmSettingsFromMetadata(session);
                 syncLocalDataToCloud().then((res) => {
                     if (res.success) {
                         addToast('소셜 클라우드와 북마크/메모가 동기화되었습니다.');
@@ -116,6 +130,48 @@ export default function SBA_QT_App() {
 
         return () => subscription.unsubscribe();
     }, []);
+
+    // 브라우저 알림 스케줄러 구동
+    useEffect(() => {
+        const checkNotification = () => {
+            const enabledStr = localStorage.getItem('sba_qt_alarm_enabled');
+            const alarmTime = localStorage.getItem('sba_qt_alarm_time') || "08:00";
+            const lastNotified = localStorage.getItem('sba_qt_last_notified_date');
+
+            const isEnabled = enabledStr === 'true';
+            
+            if (isEnabled && session && Notification.permission === 'granted') {
+                const now = new Date();
+                const yyyy = now.getFullYear();
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                const todayStr = `${yyyy}-${mm}-${dd}`;
+                
+                const currentHourMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+                if (currentHourMin === alarmTime && lastNotified !== todayStr) {
+                    try {
+                        const notification = new Notification("서울북부교회 QT & 통독", {
+                            body: "오늘의 큐티 말씀이 도착했습니다. 말씀과 함께 은혜로운 하루를 시작해 보세요!",
+                            icon: "/favicon.ico"
+                        });
+                        notification.onclick = () => {
+                            window.focus();
+                            setActiveTab('today');
+                        };
+                        localStorage.setItem('sba_qt_last_notified_date', todayStr);
+                    } catch (err) {
+                        console.error("알림 발송 실패:", err);
+                    }
+                }
+            }
+        };
+
+        const timer = setInterval(checkNotification, 30000);
+        checkNotification();
+
+        return () => clearInterval(timer);
+    }, [session, setActiveTab]);
 
     // 스케줄 데이터 로딩 함수 (지수 백오프 및 fallback 연동)
     const loadSchedule = async () => {
@@ -420,7 +476,9 @@ export default function SBA_QT_App() {
                         <h2 className="sba-splash-sub-title">
                             <DecryptedText text="QT & 통독" speed={50} maxIterations={5} />
                         </h2>
-                        <p className="sba-splash-desc">말씀으로 하루를 여는 은혜의 시간</p>
+                        <p className="sba-splash-desc">
+                            <DecryptedText text="말씀으로 하루를 여는 은혜의 시간" speed={50} maxIterations={5} />
+                        </p>
                     </div>
                     <div className="sba-splash-footer">
                         개발: 이소원 형제

@@ -3819,6 +3819,7 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
 // ==========================================
 function ImageCardModal({ isOpen, onClose, passage, verses }) {
   const [activeTheme, setActiveTheme] = useState('hanji');
+  const [cardRatio, setCardRatio] = useState('4/5'); // '4/5' or '9/16'
   const cardRef = useRef(null);
   
   if (!isOpen) return null;
@@ -3828,8 +3829,8 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
   if (verses) {
     const verseList = Object.entries(verses);
     if (verseList.length > 0) {
-      // 모든 구절을 모아서 띄우기
-      verseText = verseList.map(([num, text]) => `${num}절 ${text}`).join(' ');
+      // 절 번호 제거하고 순수 구절 내용만 결합
+      verseText = verseList.map(([num, text]) => text.trim()).join(' ');
     }
   }
 
@@ -3956,7 +3957,7 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
         </filter>
       </svg>
 
-      <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '400px', padding: '20px'}}>
+      <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '420px', padding: '20px'}}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h3 style={{marginTop: 0, marginBottom: 0, fontSize: '1rem', fontWeight: 'bold'}}>말씀 카드 제작</h3>
           <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--sba-text-muted)' }} onClick={onClose}>✕</button>
@@ -3971,18 +3972,24 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
               radial-gradient(circle at 50% 50%, rgba(255,255,255,0.4), rgba(0,0,0,0.01)),
               url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='${currentTheme.noiseOpacity}'/%3E%3C/svg%3E")
             `,
-            padding: '36px 28px',
+            padding: cardRatio === '9/16' ? '48px 24px' : '36px 28px',
             borderRadius: '12px',
             boxShadow: '0 8px 20px rgba(0, 0, 0, 0.12)',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            aspectRatio: '4 / 5',
+            aspectRatio: cardRatio === '9/16' ? '9 / 16' : '4 / 5',
+            maxHeight: '65vh',
+            height: 'auto',
+            width: '100%',
+            maxWidth: cardRatio === '9/16' ? 'calc(65vh * 9 / 16)' : '100%',
+            margin: '0 auto',
             color: currentTheme.textColor,
-            fontFamily: "'Nanum Myeongjo', 'Georgia', serif",
+            fontFamily: "'Noto Serif KR', 'Nanum Myeongjo', 'Georgia', serif",
             position: 'relative',
             overflow: 'hidden',
-            border: `1px solid ${currentTheme.borderColor}`
+            border: `1px solid ${currentTheme.borderColor}`,
+            boxSizing: 'border-box'
           }}
         >
           {/* 장식용 프레임 라인 */}
@@ -4001,11 +4008,11 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
             SBA QT
           </div>
           
-          <div style={{ margin: '20px 0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', zIndex: 1 }}>
+          <div style={{ margin: '20px 0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', zIndex: 1 }}>
             <p style={{ 
               fontSize: fontSize, 
-              lineHeight: '1.75', 
-              margin: 0, 
+              lineHeight: '1.8', 
+              margin: '0 0 16px 0', 
               fontWeight: '500', 
               wordBreak: 'keep-all', 
               textAlign: 'center',
@@ -4013,20 +4020,64 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
             }}>
               “ {verseText} ”
             </p>
+            <div style={{
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              color: currentTheme.textColor,
+              opacity: 0.8,
+              textAlign: 'center',
+              marginTop: '8px',
+              fontStyle: 'italic'
+            }}>
+              - {passage} -
+            </div>
           </div>
 
-          <div style={{ borderTop: `1px solid ${currentTheme.borderColor}`, paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1, opacity: 0.9 }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: currentTheme.textColor }}>
-              {passage}
-            </span>
-            <span style={{ fontSize: '0.7rem', color: currentTheme.metaColor }}>
+          <div style={{ borderTop: `1px solid ${currentTheme.borderColor}`, paddingTop: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1, opacity: 0.9 }}>
+            <span style={{ fontSize: '0.7rem', color: currentTheme.metaColor, letterSpacing: '1px' }}>
               서울북부교회 청년회
             </span>
           </div>
         </div>
 
+        {/* 비율 선택 토글 */}
+        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+          <button
+            onClick={() => setCardRatio('4/5')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid var(--sba-border-strong)',
+              background: cardRatio === '4/5' ? 'var(--sba-text)' : 'var(--sba-card-sub-bg)',
+              color: cardRatio === '4/5' ? 'var(--sba-bg)' : 'var(--sba-text)',
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+              fontWeight: '600',
+              transition: 'all 0.2s'
+            }}
+          >
+            4:5 (기본)
+          </button>
+          <button
+            onClick={() => setCardRatio('9/16')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid var(--sba-border-strong)',
+              background: cardRatio === '9/16' ? 'var(--sba-text)' : 'var(--sba-card-sub-bg)',
+              color: cardRatio === '9/16' ? 'var(--sba-bg)' : 'var(--sba-text)',
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+              fontWeight: '600',
+              transition: 'all 0.2s'
+            }}
+          >
+            9:16 (인스타 스토리)
+          </button>
+        </div>
+
         {/* 테마 셀렉터 */}
-        <div style={{marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '16px'}}>
+        <div style={{marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '16px'}}>
           {Object.entries(themes).map(([key, t]) => (
             <button 
               key={key}
@@ -4050,7 +4101,7 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
         </div>
 
         {/* 하단 버튼 */}
-        <div style={{display: 'flex', gap: '8px', marginTop: '24px'}}>
+        <div style={{display: 'flex', gap: '8px', marginTop: '20px'}}>
           <button className="sba-btn" style={{flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleShare}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             공유
@@ -4433,6 +4484,31 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
         return saved ? parseFloat(saved) : 17.6;
     });
 
+    // 알림 설정 상태 정의
+    const [alarmEnabled, setAlarmEnabled] = useState(() => {
+        return localStorage.getItem('sba_qt_alarm_enabled') === 'true';
+    });
+    const [alarmTime, setAlarmTime] = useState(() => {
+        return localStorage.getItem('sba_qt_alarm_time') || '08:00';
+    });
+
+    const [alarmHour, alarmMinute] = alarmTime.split(':');
+
+    // 세션이 유효할 때 클라우드 메타데이터가 변경되면 알림 상태 동기화
+    useEffect(() => {
+        if (session && session.user && session.user.user_metadata) {
+            const meta = session.user.user_metadata;
+            if (meta.sba_qt_alarm_enabled !== undefined) {
+                setAlarmEnabled(meta.sba_qt_alarm_enabled);
+                localStorage.setItem('sba_qt_alarm_enabled', String(meta.sba_qt_alarm_enabled));
+            }
+            if (meta.sba_qt_alarm_time) {
+                setAlarmTime(meta.sba_qt_alarm_time);
+                localStorage.setItem('sba_qt_alarm_time', meta.sba_qt_alarm_time);
+            }
+        }
+    }, [session]);
+
     const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
 
     const changeFontSize = (delta) => {
@@ -4481,6 +4557,50 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
     }, [isOpen, session]);
 
     if (!isOpen) return null;
+
+    const handleAlarmToggle = async (e) => {
+        const checked = e.target.checked;
+        if (checked) {
+            if (!('Notification' in window)) {
+                alert('이 브라우저는 알림 기능을 지원하지 않습니다.');
+                return;
+            }
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                alert('알림 권한이 거부되었습니다. 브라우저 설정에서 알림 권한을 허용해 주세요.');
+                return;
+            }
+        }
+        
+        setAlarmEnabled(checked);
+        localStorage.setItem('sba_qt_alarm_enabled', checked ? 'true' : 'false');
+        
+        if (session) {
+            await supabase.auth.updateUser({
+                data: {
+                    sba_qt_alarm_enabled: checked,
+                    sba_qt_alarm_time: alarmTime
+                }
+            });
+        }
+        addToast(checked ? '매일 QT 알림이 켜졌습니다.' : '매일 QT 알림이 꺼졌습니다.');
+    };
+
+    const handleAlarmTimeChange = async (h, m) => {
+        const newTime = `${h}:${m}`;
+        setAlarmTime(newTime);
+        localStorage.setItem('sba_qt_alarm_time', newTime);
+        
+        if (session) {
+            await supabase.auth.updateUser({
+                data: {
+                    sba_qt_alarm_enabled: alarmEnabled,
+                    sba_qt_alarm_time: newTime
+                }
+            });
+        }
+        addToast(`알림 시간이 ${h}시 ${m}분으로 변경되었습니다.`);
+    };
 
     const handleSync = async () => {
         setSyncing(true);
@@ -4547,6 +4667,9 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
         localStorage.removeItem('sba_qt_bookmarks');
         localStorage.removeItem('sba_qt_notes');
         localStorage.removeItem('sba_bible_font_size');
+        localStorage.removeItem('sba_qt_alarm_enabled');
+        localStorage.removeItem('sba_qt_alarm_time');
+        localStorage.removeItem('sba_qt_last_notified_date');
         addToast('로컬 데이터가 완전히 초기화되었습니다.');
         window.location.reload();
     };
@@ -4584,7 +4707,76 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
                     </SettingControl>
                 </SettingRow>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px' }}>
+                {/* 매일 말씀 알림 설정 */}
+                <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
+                        <b>매일 QT 알림 설정 (Notification)</b>
+                    </p>
+                    {!session ? (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--sba-text-muted)', textAlign: 'center', padding: '8px 0' }}>
+                            로그인 후 알림 설정을 사용할 수 있습니다.
+                        </div>
+                    ) : (
+                        <>
+                            <SettingRow style={{ borderBottom: 'none', padding: '8px 0' }}>
+                                <SettingLabel>알림 받기</SettingLabel>
+                                <SettingControl>
+                                    <SwitchContainer>
+                                        <SwitchInput 
+                                            type="checkbox" 
+                                            checked={alarmEnabled} 
+                                            onChange={handleAlarmToggle} 
+                                        />
+                                        <SwitchSlider />
+                                    </SwitchContainer>
+                                </SettingControl>
+                            </SettingRow>
+                            {alarmEnabled && (
+                                <SettingRow style={{ borderBottom: 'none', padding: '8px 0' }}>
+                                    <SettingLabel>알림 시간</SettingLabel>
+                                    <SettingControl style={{ gap: '6px' }}>
+                                        <select 
+                                            value={alarmHour} 
+                                            onChange={(e) => handleAlarmTimeChange(e.target.value, alarmMinute)}
+                                            style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '6px',
+                                                border: '1px solid var(--sba-border-strong)',
+                                                background: 'var(--sba-card-bg)',
+                                                color: 'var(--sba-text)',
+                                                fontSize: '0.85rem'
+                                            }}
+                                        >
+                                            {Array.from({ length: 24 }).map((_, i) => {
+                                                const h = String(i).padStart(2, '0');
+                                                return <option key={h} value={h}>{h}시</option>;
+                                            })}
+                                        </select>
+                                        <select 
+                                            value={alarmMinute} 
+                                            onChange={(e) => handleAlarmTimeChange(alarmHour, e.target.value)}
+                                            style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '6px',
+                                                border: '1px solid var(--sba-border-strong)',
+                                                background: 'var(--sba-card-bg)',
+                                                color: 'var(--sba-text)',
+                                                fontSize: '0.85rem'
+                                            }}
+                                        >
+                                            {Array.from({ length: 12 }).map((_, i) => {
+                                                const m = String(i * 5).padStart(2, '0');
+                                                return <option key={m} value={m}>{m}분</option>;
+                                            })}
+                                        </select>
+                                    </SettingControl>
+                                </SettingRow>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px', borderTop: '1px solid var(--sba-border)', paddingTop: '12px' }}>
                     <span>북마크: {stats.bookmarks}개 | 메모: {stats.notes}개</span>
                     <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 데이터 초기화</DeleteTextButton>
                 </div>
@@ -5015,9 +5207,22 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
 
     // Supabase Auth 세션 감지 및 자동 동기화
     useEffect(() => {
+        const syncAlarmSettingsFromMetadata = (sess) => {
+            if (sess && sess.user && sess.user.user_metadata) {
+                const meta = sess.user.user_metadata;
+                if (meta.sba_qt_alarm_enabled !== undefined) {
+                    localStorage.setItem('sba_qt_alarm_enabled', String(meta.sba_qt_alarm_enabled));
+                }
+                if (meta.sba_qt_alarm_time) {
+                    localStorage.setItem('sba_qt_alarm_time', meta.sba_qt_alarm_time);
+                }
+            }
+        };
+
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
             if (session) {
+                syncAlarmSettingsFromMetadata(session);
                 syncLocalDataToCloud().then((res) => {
                     if (res.success) {
                         addToast('소셜 클라우드와 북마크/메모가 동기화되었습니다.');
@@ -5030,6 +5235,7 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
             if (session) {
+                syncAlarmSettingsFromMetadata(session);
                 syncLocalDataToCloud().then((res) => {
                     if (res.success) {
                         addToast('소셜 클라우드와 북마크/메모가 동기화되었습니다.');
@@ -5041,6 +5247,48 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
 
         return () => subscription.unsubscribe();
     }, []);
+
+    // 브라우저 알림 스케줄러 구동
+    useEffect(() => {
+        const checkNotification = () => {
+            const enabledStr = localStorage.getItem('sba_qt_alarm_enabled');
+            const alarmTime = localStorage.getItem('sba_qt_alarm_time') || "08:00";
+            const lastNotified = localStorage.getItem('sba_qt_last_notified_date');
+
+            const isEnabled = enabledStr === 'true';
+            
+            if (isEnabled && session && Notification.permission === 'granted') {
+                const now = new Date();
+                const yyyy = now.getFullYear();
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                const todayStr = `${yyyy}-${mm}-${dd}`;
+                
+                const currentHourMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+                if (currentHourMin === alarmTime && lastNotified !== todayStr) {
+                    try {
+                        const notification = new Notification("서울북부교회 QT & 통독", {
+                            body: "오늘의 큐티 말씀이 도착했습니다. 말씀과 함께 은혜로운 하루를 시작해 보세요!",
+                            icon: "/favicon.ico"
+                        });
+                        notification.onclick = () => {
+                            window.focus();
+                            setActiveTab('today');
+                        };
+                        localStorage.setItem('sba_qt_last_notified_date', todayStr);
+                    } catch (err) {
+                        console.error("알림 발송 실패:", err);
+                    }
+                }
+            }
+        };
+
+        const timer = setInterval(checkNotification, 30000);
+        checkNotification();
+
+        return () => clearInterval(timer);
+    }, [session, setActiveTab]);
 
     // 스케줄 데이터 로딩 함수 (지수 백오프 및 fallback 연동)
     const loadSchedule = async () => {
@@ -5346,7 +5594,9 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
                         <h2 className="sba-splash-sub-title">
                             <DecryptedText text="QT & 통독" speed={50} maxIterations={5} />
                         </h2>
-                        <p className="sba-splash-desc">말씀으로 하루를 여는 은혜의 시간</p>
+                        <p className="sba-splash-desc">
+                            <DecryptedText text="말씀으로 하루를 여는 은혜의 시간" speed={50} maxIterations={5} />
+                        </p>
                     </div>
                     <div className="sba-splash-footer">
                         개발: 이소원 형제
