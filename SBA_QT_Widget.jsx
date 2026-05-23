@@ -181,16 +181,21 @@ const SbaStyledWrapper = styled.div`
     align-items: flex-start;
     cursor: pointer;
     transition: background-color 0.2s;
+    -webkit-tap-highlight-color: transparent;
 }
-.sba-verse-block:hover {
-    background-color: var(--sba-card-active);
+@media (hover: hover) {
+    .sba-verse-block:hover {
+        background-color: var(--sba-card-active);
+    }
 }
 
 .sba-verse-block.highlighted {
     background-color: var(--sba-highlight);
 }
-.sba-verse-block.highlighted:hover {
-    background-color: var(--sba-highlight-hover);
+@media (hover: hover) {
+    .sba-verse-block.highlighted:hover {
+        background-color: var(--sba-highlight-hover);
+    }
 }
 
 .sba-verse-block.focused {
@@ -738,6 +743,11 @@ const SbaStyledWrapper = styled.div`
 
 .sba-date-nav-wrapper:hover {
     border-color: var(--sba-text-muted) !important;
+}
+
+/* 구절 선택 액션바 활성화 시 오늘의 메모 플로팅 버튼을 위로 회피시킴 */
+.sba-app-container:has(.sba-floating-bar) .sba-memo-float-btn {
+    bottom: calc(154px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
 `;
@@ -1509,15 +1519,15 @@ function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session, onOpe
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '12px',
+                    gap: '6px',
                     background: 'var(--sba-card-active)',
-                    padding: '8px 16px',
+                    padding: '6px 10px',
                     borderRadius: '20px',
                     border: '1px solid var(--sba-border-strong)',
                     userSelect: 'none',
                     transition: 'all 0.2s ease',
                     flex: 1,
-                    maxWidth: '280px'
+                    maxWidth: '210px'
                 }}
             >
                 <button 
@@ -1532,7 +1542,7 @@ function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session, onOpe
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '6px',
+                        padding: '4px',
                         borderRadius: '50%',
                         transition: 'background 0.2s'
                     }}
@@ -1546,9 +1556,9 @@ function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session, onOpe
                         cursor: 'pointer', 
                         display: 'flex', 
                         alignItems: 'center', 
-                        gap: '4px', 
+                        gap: '2px', 
                         margin: 0,
-                        fontSize: '1.05rem',
+                        fontSize: '0.92rem',
                         fontWeight: '700',
                         color: 'var(--sba-text)'
                     }}
@@ -2228,7 +2238,7 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
       </div>
 
       {selectedCount > 0 && (
-        <FloatingBar>
+        <FloatingBar className="sba-floating-bar">
           <FloatingInfo>{selectedCount}개 구절 선택됨</FloatingInfo>
           <FloatingBtnGroup>
             <FloatingBtn onClick={copyToClipboard}>복사</FloatingBtn>
@@ -3638,26 +3648,30 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
           </GuestNotice>
         ) : (
           <form onSubmit={handleSubmitReflection} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
               <StyledInput 
                 type="text" 
                 placeholder="예: 마태복음 1:1"
                 value={passage}
                 onChange={e => setPassage(e.target.value)}
-                style={{ flex: 1, minWidth: '120px' }}
+                style={{ width: '100%', boxSizing: 'border-box' }}
               />
-              <OutlinedButton 
-                type="button" 
-                onClick={() => setIsBookmarkSelectOpen(true)}
-              >
-                북마크에서 선택
-              </OutlinedButton>
-              <OutlinedButton 
-                type="button" 
-                onClick={handleImportMemo}
-              >
-                내 메모 긁어오기
-              </OutlinedButton>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <OutlinedButton 
+                  type="button" 
+                  onClick={() => setIsBookmarkSelectOpen(true)}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  북마크에서 선택
+                </OutlinedButton>
+                <OutlinedButton 
+                  type="button" 
+                  onClick={handleImportMemo}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  내 메모 긁어오기
+                </OutlinedButton>
+              </div>
             </div>
             
             <StyledTextarea 
@@ -3878,11 +3892,11 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
   // 글자 수에 비례하여 동적으로 폰트 크기 계산 (안 잘리고 다 들어가도록 자동 조절)
   const getFontSize = (text) => {
     const len = text.length;
-    if (len < 50) return '1.35rem';
-    if (len < 100) return '1.15rem';
-    if (len < 180) return '1.0rem';
-    if (len < 260) return '0.85rem';
-    return '0.75rem';
+    if (len < 50) return '1.15rem';
+    if (len < 100) return '0.98rem';
+    if (len < 180) return '0.85rem';
+    if (len < 260) return '0.75rem';
+    return '0.68rem';
   };
 
   const fontSize = getFontSize(verseText);
@@ -3975,7 +3989,7 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
               radial-gradient(circle at 50% 50%, rgba(255,255,255,0.4), rgba(0,0,0,0.01)),
               url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='${currentTheme.noiseOpacity}'/%3E%3C/svg%3E")
             `,
-            padding: cardRatio === '9/16' ? '48px 24px' : '36px 28px',
+            padding: cardRatio === '9/16' ? '64px 36px' : '48px 40px',
             borderRadius: '12px',
             boxShadow: '0 8px 20px rgba(0, 0, 0, 0.12)',
             display: 'flex',
@@ -3998,10 +4012,10 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
           {/* 장식용 프레임 라인 */}
           <div style={{
             position: 'absolute',
-            top: '12px',
-            left: '12px',
-            right: '12px',
-            bottom: '12px',
+            top: '24px',
+            left: '24px',
+            right: '24px',
+            bottom: '24px',
             border: `1px solid ${currentTheme.borderColor}`,
             opacity: 0.5,
             pointerEvents: 'none'
@@ -4153,6 +4167,8 @@ const ModalContent = styled.div`
   border-radius: 12px;
   width: 90%;
   max-width: ${props => props.$maxWidth || '400px'};
+  max-height: 85vh;
+  overflow-y: auto;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   border: 1px solid var(--sba-border-strong);
   position: relative;
@@ -5152,6 +5168,10 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
     const [currentDate, setCurrentDate] = useState(getEffectiveDate());
     const [activeTab, setActiveTab] = useState('today');
 
+    // 뒤로가기(popstate) 제어용 상태
+    const [isPopStateActive, setIsPopStateActive] = useState(false);
+    const loadDateStrRef = React.useRef(safeToISODateString(getEffectiveDate()));
+
     // UI 상태 관리
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -5318,6 +5338,9 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
 
     useEffect(() => {
         loadSchedule();
+        
+        // 첫 진입 시 히스토리 초기화
+        window.history.replaceState({ tab: activeTab }, '');
 
         // 스플래시 애니메이션 타이머
         const fadeTimer = setTimeout(() => setIsSplashFading(true), 2200);
@@ -5326,6 +5349,56 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
         return () => {
             clearTimeout(fadeTimer);
             clearTimeout(removeTimer);
+        };
+    }, []);
+
+    // 탭 변경 시 히스토리 스택에 push
+    useEffect(() => {
+        if (!isPopStateActive) {
+            window.history.pushState({ tab: activeTab }, '');
+        }
+        setIsPopStateActive(false);
+    }, [activeTab]);
+
+    // 뒤로가기(popstate) 가로채기 처리
+    useEffect(() => {
+        const handlePopState = (e) => {
+            const isAnyModalOpen = showCalendar || showSettings || showAuth;
+            if (isAnyModalOpen) {
+                setShowCalendar(false);
+                setShowSettings(false);
+                setShowAuth(false);
+                // 모달만 닫고 히스토리 스택 원복
+                window.history.pushState({ tab: activeTab }, '');
+                return;
+            }
+
+            if (e.state && e.state.tab && e.state.tab !== activeTab) {
+                setIsPopStateActive(true);
+                setActiveTab(e.state.tab);
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [showCalendar, showSettings, showAuth, activeTab, isPopStateActive]);
+
+    // 다음 날 앱 접속 시 자동 새로고침(리로드) 처리
+    useEffect(() => {
+        const checkDateChange = () => {
+            const currentEffectiveStr = safeToISODateString(getEffectiveDate());
+            if (currentEffectiveStr !== loadDateStrRef.current) {
+                console.log("날짜 변경 감지: 새로고침을 실행합니다.");
+                window.location.reload();
+            }
+        };
+
+        window.addEventListener('focus', checkDateChange);
+        const interval = setInterval(checkDateChange, 60000);
+
+        return () => {
+            window.removeEventListener('focus', checkDateChange);
+            clearInterval(interval);
         };
     }, []);
 

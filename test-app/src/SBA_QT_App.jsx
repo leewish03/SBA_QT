@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import './SBA_QT.css';
 
-import { getMidnightKST, calcQtDays, FULL_TO_SHORT, DAYS_ARR, getEffectiveDate } from './utils/bibleLogic';
+import { getMidnightKST, calcQtDays, FULL_TO_SHORT, DAYS_ARR, getEffectiveDate, safeToISODateString } from './utils/bibleLogic';
 import { TopHeader, BottomNav, AppFooter } from './components/NavComponents';
 import { TabToday, TabReading, TabBookmarks, SharingTab } from './components/TabComponents';
 import { TabWeekly, SettingsModal, CalendarModal, AuthModal } from './components/WeeklyAndModals';
@@ -31,6 +31,10 @@ export default function SBA_QT_App() {
     const [scheduleData, setScheduleData] = useState(null);
     const [currentDate, setCurrentDate] = useState(getEffectiveDate());
     const [activeTab, setActiveTab] = useState('today');
+
+    // 뒤로가기(popstate) 제어용 상태
+    const [isPopStateActive, setIsPopStateActive] = useState(false);
+    const loadDateStrRef = React.useRef(safeToISODateString(getEffectiveDate()));
 
     // UI 상태 관리
     const [loading, setLoading] = useState(true);
@@ -198,6 +202,9 @@ export default function SBA_QT_App() {
 
     useEffect(() => {
         loadSchedule();
+        
+        // 첫 진입 시 히스토리 초기화
+        window.history.replaceState({ tab: activeTab }, '');
 
         // 스플래시 애니메이션 타이머
         const fadeTimer = setTimeout(() => setIsSplashFading(true), 2200);
@@ -206,6 +213,56 @@ export default function SBA_QT_App() {
         return () => {
             clearTimeout(fadeTimer);
             clearTimeout(removeTimer);
+        };
+    }, []);
+
+    // 탭 변경 시 히스토리 스택에 push
+    useEffect(() => {
+        if (!isPopStateActive) {
+            window.history.pushState({ tab: activeTab }, '');
+        }
+        setIsPopStateActive(false);
+    }, [activeTab]);
+
+    // 뒤로가기(popstate) 가로채기 처리
+    useEffect(() => {
+        const handlePopState = (e) => {
+            const isAnyModalOpen = showCalendar || showSettings || showAuth;
+            if (isAnyModalOpen) {
+                setShowCalendar(false);
+                setShowSettings(false);
+                setShowAuth(false);
+                // 모달만 닫고 히스토리 스택 원복
+                window.history.pushState({ tab: activeTab }, '');
+                return;
+            }
+
+            if (e.state && e.state.tab && e.state.tab !== activeTab) {
+                setIsPopStateActive(true);
+                setActiveTab(e.state.tab);
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [showCalendar, showSettings, showAuth, activeTab, isPopStateActive]);
+
+    // 다음 날 앱 접속 시 자동 새로고침(리로드) 처리
+    useEffect(() => {
+        const checkDateChange = () => {
+            const currentEffectiveStr = safeToISODateString(getEffectiveDate());
+            if (currentEffectiveStr !== loadDateStrRef.current) {
+                console.log("날짜 변경 감지: 새로고침을 실행합니다.");
+                window.location.reload();
+            }
+        };
+
+        window.addEventListener('focus', checkDateChange);
+        const interval = setInterval(checkDateChange, 60000);
+
+        return () => {
+            window.removeEventListener('focus', checkDateChange);
+            clearInterval(interval);
         };
     }, []);
 

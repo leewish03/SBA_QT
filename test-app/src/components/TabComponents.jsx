@@ -600,7 +600,7 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
       </div>
 
       {selectedCount > 0 && (
-        <FloatingBar>
+        <FloatingBar className="sba-floating-bar">
           <FloatingInfo>{selectedCount}개 구절 선택됨</FloatingInfo>
           <FloatingBtnGroup>
             <FloatingBtn onClick={copyToClipboard}>복사</FloatingBtn>
@@ -2010,26 +2010,30 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
           </GuestNotice>
         ) : (
           <form onSubmit={handleSubmitReflection} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
               <StyledInput 
                 type="text" 
                 placeholder="예: 마태복음 1:1"
                 value={passage}
                 onChange={e => setPassage(e.target.value)}
-                style={{ flex: 1, minWidth: '120px' }}
+                style={{ width: '100%', boxSizing: 'border-box' }}
               />
-              <OutlinedButton 
-                type="button" 
-                onClick={() => setIsBookmarkSelectOpen(true)}
-              >
-                북마크에서 선택
-              </OutlinedButton>
-              <OutlinedButton 
-                type="button" 
-                onClick={handleImportMemo}
-              >
-                내 메모 긁어오기
-              </OutlinedButton>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <OutlinedButton 
+                  type="button" 
+                  onClick={() => setIsBookmarkSelectOpen(true)}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  북마크에서 선택
+                </OutlinedButton>
+                <OutlinedButton 
+                  type="button" 
+                  onClick={handleImportMemo}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  내 메모 긁어오기
+                </OutlinedButton>
+              </div>
             </div>
             
             <StyledTextarea 
@@ -2250,11 +2254,11 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
   // 글자 수에 비례하여 동적으로 폰트 크기 계산 (안 잘리고 다 들어가도록 자동 조절)
   const getFontSize = (text) => {
     const len = text.length;
-    if (len < 50) return '1.35rem';
-    if (len < 100) return '1.15rem';
-    if (len < 180) return '1.0rem';
-    if (len < 260) return '0.85rem';
-    return '0.75rem';
+    if (len < 50) return '1.15rem';
+    if (len < 100) return '0.98rem';
+    if (len < 180) return '0.85rem';
+    if (len < 260) return '0.75rem';
+    return '0.68rem';
   };
 
   const fontSize = getFontSize(verseText);
@@ -2347,7 +2351,7 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
               radial-gradient(circle at 50% 50%, rgba(255,255,255,0.4), rgba(0,0,0,0.01)),
               url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='${currentTheme.noiseOpacity}'/%3E%3C/svg%3E")
             `,
-            padding: cardRatio === '9/16' ? '48px 24px' : '36px 28px',
+            padding: cardRatio === '9/16' ? '64px 36px' : '48px 40px',
             borderRadius: '12px',
             boxShadow: '0 8px 20px rgba(0, 0, 0, 0.12)',
             display: 'flex',
@@ -2370,10 +2374,10 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
           {/* 장식용 프레임 라인 */}
           <div style={{
             position: 'absolute',
-            top: '12px',
-            left: '12px',
-            right: '12px',
-            bottom: '12px',
+            top: '24px',
+            left: '24px',
+            right: '24px',
+            bottom: '24px',
             border: `1px solid ${currentTheme.borderColor}`,
             opacity: 0.5,
             pointerEvents: 'none'

@@ -170,16 +170,21 @@
     align-items: flex-start;
     cursor: pointer;
     transition: background-color 0.2s;
+    -webkit-tap-highlight-color: transparent;
 }
-.sba-verse-block:hover {
-    background-color: var(--sba-card-active);
+@media (hover: hover) {
+    .sba-verse-block:hover {
+        background-color: var(--sba-card-active);
+    }
 }
 
 .sba-verse-block.highlighted {
     background-color: var(--sba-highlight);
 }
-.sba-verse-block.highlighted:hover {
-    background-color: var(--sba-highlight-hover);
+@media (hover: hover) {
+    .sba-verse-block.highlighted:hover {
+        background-color: var(--sba-highlight-hover);
+    }
 }
 
 .sba-verse-block.focused {
@@ -727,4 +732,9 @@
 
 .sba-date-nav-wrapper:hover {
     border-color: var(--sba-text-muted) !important;
+}
+
+/* 구절 선택 액션바 활성화 시 오늘의 메모 플로팅 버튼을 위로 회피시킴 */
+.sba-app-container:has(.sba-floating-bar) .sba-memo-float-btn {
+    bottom: calc(154px + env(safe-area-inset-bottom, 0px)) !important;
 }

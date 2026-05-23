@@ -88,15 +88,15 @@ export function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '12px',
+                    gap: '6px',
                     background: 'var(--sba-card-active)',
-                    padding: '8px 16px',
+                    padding: '6px 10px',
                     borderRadius: '20px',
                     border: '1px solid var(--sba-border-strong)',
                     userSelect: 'none',
                     transition: 'all 0.2s ease',
                     flex: 1,
-                    maxWidth: '280px'
+                    maxWidth: '210px'
                 }}
             >
                 <button 
@@ -111,7 +111,7 @@ export function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '6px',
+                        padding: '4px',
                         borderRadius: '50%',
                         transition: 'background 0.2s'
                     }}
@@ -125,9 +125,9 @@ export function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session
                         cursor: 'pointer', 
                         display: 'flex', 
                         alignItems: 'center', 
-                        gap: '4px', 
+                        gap: '2px', 
                         margin: 0,
-                        fontSize: '1.05rem',
+                        fontSize: '0.92rem',
                         fontWeight: '700',
                         color: 'var(--sba-text)'
                     }}
