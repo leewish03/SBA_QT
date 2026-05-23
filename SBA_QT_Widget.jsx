@@ -1676,7 +1676,7 @@ const DrawerContainer = styled.div`
 
 const MemoFloatingButton = styled.button`
   position: fixed;
-  bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(102px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 95;
