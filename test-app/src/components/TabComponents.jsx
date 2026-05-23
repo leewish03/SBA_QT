@@ -66,19 +66,34 @@ const MemoFloatingButton = styled.button`
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(8px);
-  transition: all 0.2s ease-in-out;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   
   &:hover {
-    transform: translateX(-50%) translateY(-2px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+    transform: translateX(-50%) translateY(-3px) scale(1.05);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
     background: var(--sba-card-sub-bg, #f3f4f6);
   }
   
   &:active {
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(-50%) translateY(0) scale(0.95);
   }
   
-  animation: sba-memo-pulse 2s infinite;
+  animation: sba-memo-bounce-in 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards, sba-memo-pulse 2.5s infinite;
+  
+  @keyframes sba-memo-bounce-in {
+    0% {
+      transform: translateX(-50%) translateY(30px) scale(0.8);
+      opacity: 0;
+    }
+    70% {
+      transform: translateX(-50%) translateY(-4px) scale(1.03);
+      opacity: 0.9;
+    }
+    100% {
+      transform: translateX(-50%) translateY(0) scale(1);
+      opacity: 1;
+    }
+  }
   
   @keyframes sba-memo-pulse {
     0% {

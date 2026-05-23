@@ -205,7 +205,7 @@ export function AppFooter() {
     return (
         <footer style={{ textAlign: 'center', padding: '40px 20px 80px', color: 'var(--sba-text-muted)', fontSize: '0.75rem', lineHeight: '1.6', background: 'transparent' }}>
             <p style={{margin: '0 0 4px'}}>Based on <b>서울북부교회</b> Reading Schedule</p>
-            <p style={{margin: '0 0 4px'}}>Developed by <b>이소원 형제</b></p>
+            <p style={{margin: '0 0 4px'}}>Developed by <b>leewish</b></p>
             <p style={{margin: '0 0 4px'}}>문의 및 피드백: <a href="mailto:lekas1217@gmail.com" style={{color: 'var(--sba-text-muted)', textDecoration:'underline'}}>lekas1217@gmail.com</a></p>
         </footer>
     );

@@ -543,17 +543,17 @@ export default function SBA_QT_App() {
                 <div className={`sba-splash-screen ${isSplashFading ? 'fade-out' : ''}`}>
                     <div className="sba-splash-content">
                         <h1 className="sba-splash-main-title">
-                            <DecryptedText text="서울북부교회" speed={40} maxIterations={5} />
+                            <DecryptedText text="서울북부교회" speed={15} maxIterations={4} />
                         </h1>
                         <h2 className="sba-splash-sub-title">
-                            <DecryptedText text="QT & 통독" speed={50} maxIterations={5} />
+                            <DecryptedText text="QT & 통독" speed={20} maxIterations={4} />
                         </h2>
                         <p className="sba-splash-desc">
-                            <DecryptedText text="말씀으로 하루를 여는 은혜의 시간" speed={50} maxIterations={5} />
+                            <DecryptedText text="말씀으로 하루를 여는 은혜의 시간" speed={20} maxIterations={4} />
                         </p>
                     </div>
                     <div className="sba-splash-footer">
-                        개발: 이소원 형제
+                        개발: leewish
                     </div>
                 </div>
             )}

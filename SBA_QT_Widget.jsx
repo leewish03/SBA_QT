@@ -747,7 +747,7 @@ const SbaStyledWrapper = styled.div`
 
 /* 구절 선택 액션바 활성화 시 오늘의 메모 플로팅 버튼을 위로 회피시킴 */
 .sba-app-container:has(.sba-floating-bar) .sba-memo-float-btn {
-    bottom: calc(154px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(192px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
 `;
@@ -1636,7 +1636,7 @@ function AppFooter() {
     return (
         <footer style={{ textAlign: 'center', padding: '40px 20px 80px', color: 'var(--sba-text-muted)', fontSize: '0.75rem', lineHeight: '1.6', background: 'transparent' }}>
             <p style={{margin: '0 0 4px'}}>Based on <b>서울북부교회</b> Reading Schedule</p>
-            <p style={{margin: '0 0 4px'}}>Developed by <b>이소원 형제</b></p>
+            <p style={{margin: '0 0 4px'}}>Developed by <b>leewish</b></p>
             <p style={{margin: '0 0 4px'}}>문의 및 피드백: <a href="mailto:lekas1217@gmail.com" style={{color: 'var(--sba-text-muted)', textDecoration:'underline'}}>lekas1217@gmail.com</a></p>
         </footer>
     );
@@ -1704,19 +1704,34 @@ const MemoFloatingButton = styled.button`
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(8px);
-  transition: all 0.2s ease-in-out;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   
   &:hover {
-    transform: translateX(-50%) translateY(-2px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+    transform: translateX(-50%) translateY(-3px) scale(1.05);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
     background: var(--sba-card-sub-bg, #f3f4f6);
   }
   
   &:active {
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(-50%) translateY(0) scale(0.95);
   }
   
-  animation: sba-memo-pulse 2s infinite;
+  animation: sba-memo-bounce-in 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards, sba-memo-pulse 2.5s infinite;
+  
+  @keyframes sba-memo-bounce-in {
+    0% {
+      transform: translateX(-50%) translateY(30px) scale(0.8);
+      opacity: 0;
+    }
+    70% {
+      transform: translateX(-50%) translateY(-4px) scale(1.03);
+      opacity: 0.9;
+    }
+    100% {
+      transform: translateX(-50%) translateY(0) scale(1);
+      opacity: 1;
+    }
+  }
   
   @keyframes sba-memo-pulse {
     0% {
@@ -5680,17 +5695,17 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
                 <div className={`sba-splash-screen ${isSplashFading ? 'fade-out' : ''}`}>
                     <div className="sba-splash-content">
                         <h1 className="sba-splash-main-title">
-                            <DecryptedText text="서울북부교회" speed={40} maxIterations={5} />
+                            <DecryptedText text="서울북부교회" speed={15} maxIterations={4} />
                         </h1>
                         <h2 className="sba-splash-sub-title">
-                            <DecryptedText text="QT & 통독" speed={50} maxIterations={5} />
+                            <DecryptedText text="QT & 통독" speed={20} maxIterations={4} />
                         </h2>
                         <p className="sba-splash-desc">
-                            <DecryptedText text="말씀으로 하루를 여는 은혜의 시간" speed={50} maxIterations={5} />
+                            <DecryptedText text="말씀으로 하루를 여는 은혜의 시간" speed={20} maxIterations={4} />
                         </p>
                     </div>
                     <div className="sba-splash-footer">
-                        개발: 이소원 형제
+                        개발: leewish
                     </div>
                 </div>
             )}
