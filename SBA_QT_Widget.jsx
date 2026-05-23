@@ -747,7 +747,7 @@ const SbaStyledWrapper = styled.div`
 
 /* 구절 선택 액션바 활성화 시 오늘의 메모 플로팅 버튼을 위로 회피시킴 */
 .sba-app-container:has(.sba-floating-bar) .sba-memo-float-btn {
-    bottom: calc(192px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(162px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
 `;
