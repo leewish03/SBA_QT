@@ -335,10 +335,25 @@ export default function SBA_QT_App() {
                     
                     if (rowBook === book && sp <= chapter && chapter <= ep) {
                         const daysElapsed = count + (chapter - sp) + 1;
-                        const d = new Date(startKST.getTime());
-                        d.setUTCDate(startKST.getUTCDate() + daysElapsed);
-                        if (d instanceof Date && !isNaN(d.getTime())) {
-                            targetDateObj = d;
+                        
+                        // 일요일을 제외하고 daysElapsed 경과한 날짜를 구함
+                        let current = new Date(startKST.getTime());
+                        let elapsedCount = 0;
+                        let targetD = null;
+                        while (true) {
+                            if (current.getUTCDay() !== 0) {
+                                elapsedCount++;
+                                if (elapsedCount === daysElapsed) {
+                                    targetD = new Date(current.getTime());
+                                    break;
+                                }
+                            }
+                            current.setUTCDate(current.getUTCDate() + 1);
+                        }
+
+                        if (targetD && !isNaN(targetD.getTime())) {
+                            // targetDateObj는 currentDate 상태로 세팅되므로 로컬 타임존 기준으로 생성하여 날짜 밀림/요일 꼬임 방지
+                            targetDateObj = new Date(targetD.getUTCFullYear(), targetD.getUTCMonth(), targetD.getUTCDate());
                             targetTab = 'today';
                             found = true;
                         }
@@ -357,7 +372,7 @@ export default function SBA_QT_App() {
                         d.setUTCMonth(parseInt(row.month) - 1);
                         d.setUTCDate(parseInt(row.day));
                         if (d instanceof Date && !isNaN(d.getTime())) {
-                            targetDateObj = d;
+                            targetDateObj = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
                             targetTab = 'reading';
                             found = true;
                         }

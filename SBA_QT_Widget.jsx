@@ -1652,81 +1652,86 @@ const DrawerOverlay = styled.div`
 
 const DrawerContainer = styled.div`
   position: fixed;
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  bottom: 0;
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
   max-width: 600px;
   
-  background: ${props => props.$isExpanded ? 'var(--sba-modal-bg, #ffffff)' : 'transparent'};
-  border-top: ${props => props.$isExpanded ? '1px solid var(--sba-border-strong, #dddddd)' : 'none'};
-  border-left: ${props => props.$isExpanded ? '1px solid var(--sba-border-strong, #dddddd)' : 'none'};
-  border-right: ${props => props.$isExpanded ? '1px solid var(--sba-border-strong, #dddddd)' : 'none'};
-  border-radius: 8px 8px 0 0;
-  box-shadow: ${props => props.$isExpanded ? '0 -4px 16px rgba(0, 0, 0, 0.08)' : 'none'};
+  background: var(--sba-modal-bg, #ffffff);
+  border-top: 1px solid var(--sba-border-strong, #dddddd);
+  border-left: 1px solid var(--sba-border-strong, #dddddd);
+  border-right: 1px solid var(--sba-border-strong, #dddddd);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12);
   
-  height: ${props => props.$isExpanded ? '310px' : '24px'};
+  height: ${props => props.$isExpanded ? '360px' : '0px'};
   z-index: 100;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  cursor: ${props => props.$isExpanded ? 'default' : 'pointer'};
   
-  transition: 
-    background 0.22s ease-in-out,
-    border 0.22s ease-in-out,
-    box-shadow 0.22s ease-in-out,
-    height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-    
+  transition: height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+`;
+
+const MemoFloatingButton = styled.button`
+  position: fixed;
+  bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 95;
+  
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--sba-border-strong, #dddddd);
+  background: var(--sba-modal-bg, #ffffff);
+  color: var(--sba-text, #111827);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease-in-out;
+  
   &:hover {
-    border-top-color: ${props => props.$isExpanded ? 'var(--sba-border-strong)' : 'transparent'};
+    transform: translateX(-50%) translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+    background: var(--sba-card-sub-bg, #f3f4f6);
+  }
+  
+  &:active {
+    transform: translateX(-50%) translateY(0);
+  }
+  
+  animation: sba-memo-pulse 2s infinite;
+  
+  @keyframes sba-memo-pulse {
+    0% {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
+    50% {
+      box-shadow: 0 4px 20px var(--sba-border-strong, rgba(0, 0, 0, 0.25));
+    }
+    100% {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
   }
 `;
 
-const CompactHandle = styled.div`
-  width: 100%;
-  height: 24px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: transparent;
-  border: none;
+const SheetHandleBar = styled.div`
+  width: 40px;
+  height: 4px;
+  background: var(--sba-border-strong, #cccccc);
+  border-radius: 2px;
+  margin: 10px auto 4px;
   cursor: pointer;
-  pointer-events: auto;
-  touch-action: manipulation;
-  
-  .handle-arrow {
-    width: 0;
-    height: 0;
-    border-left: 6px solid transparent;
-    border-right: 6px solid transparent;
-    border-bottom: ${props => props.$isExpanded ? 'none' : '6px solid var(--sba-text-muted, #cccccc)'};
-    border-top: ${props => props.$isExpanded ? '6px solid var(--sba-text-muted, #cccccc)' : 'none'};
-    transition: transform 0.22s ease-in-out, border-color 0.2s ease;
-  }
-
-  &:hover .handle-arrow {
-    border-bottom-color: var(--sba-text-main, #888888);
-    border-top-color: var(--sba-text-main, #888888);
-  }
-`;
-
-const ExpandedHandle = styled.div`
-  width: 100%;
-  height: 16px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: var(--sba-card-sub-bg);
-  border-bottom: 1px solid var(--sba-border-strong);
-  color: var(--sba-text-subtle);
-  user-select: none;
-  cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s;
   
   &:hover {
-    color: var(--sba-text-muted);
-    background: var(--sba-border-strong);
+    background: var(--sba-text-muted, #999999);
   }
 `;
 
@@ -1978,43 +1983,40 @@ function NoteEditor({ targetDate, session }) {
 
   return (
     <>
+      {!isExpanded && (
+        <MemoFloatingButton onClick={() => setIsExpanded(true)} className="sba-memo-float-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '2px' }}>
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          오늘의 메모
+        </MemoFloatingButton>
+      )}
+
       {isExpanded && <DrawerOverlay onClick={() => setIsExpanded(false)} />}
 
-      <DrawerContainer $isExpanded={isExpanded} onClick={!isExpanded ? () => setIsExpanded(true) : undefined}>
-        {!isExpanded ? (
-          <CompactHandle className="sba-note-handle" $isExpanded={isExpanded}>
-            <div className="handle-arrow" />
-          </CompactHandle>
-        ) : (
-          <>
-            <ExpandedHandle onClick={() => setIsExpanded(false)}>
-              <div className="handle-arrow" style={{
-                width: 0,
-                height: 0,
-                borderLeft: '6px solid transparent',
-                borderRight: '6px solid transparent',
-                borderTop: '6px solid var(--sba-text-muted, #cccccc)'
-              }} />
-            </ExpandedHandle>
-
-            <DrawerHeader>
-              <HeaderTitle>
-                오늘의 메모
-                <StatusBadge>{saveStatus}</StatusBadge>
-              </HeaderTitle>
-            </DrawerHeader>
-
-            <TextareaWrapper>
-              <StyledTextarea
-                className="sba-note-textarea"
-                placeholder="오늘 말씀에서 깨달은 은혜와 묵상 내용을 기록해 보세요..."
-                value={content}
-                onChange={handleChange}
-                onBlur={handleBlur}
-              />
-            </TextareaWrapper>
-          </>
-        )}
+      <DrawerContainer $isExpanded={isExpanded}>
+        <SheetHandleBar onClick={() => setIsExpanded(false)} />
+        <DrawerHeader>
+          <HeaderTitle>
+            오늘의 메모
+            <StatusBadge>{saveStatus}</StatusBadge>
+          </HeaderTitle>
+          <button 
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: 'var(--sba-text-secondary)', padding: '4px' }} 
+            onClick={() => setIsExpanded(false)}
+          >
+            ✕
+          </button>
+        </DrawerHeader>
+        <TextareaWrapper>
+          <StyledTextarea
+            className="sba-note-textarea"
+            placeholder="오늘 말씀에서 깨달은 은혜와 묵상 내용을 기록해 보세요..."
+            value={content}
+            onChange={handleChange}
+            onBlur={handleBlur}
+          />
+        </TextareaWrapper>
       </DrawerContainer>
     </>
   );
@@ -2179,14 +2181,15 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
     const vNums = Object.keys(selectedVerses).map(Number).sort((a, b) => a - b);
     if (vNums.length === 0) return;
 
-    const fullName = SHORT_TO_FULL[book] || book;
-    let rangeStr = `${vNums[0]}`;
-    if (vNums.length > 1) {
-      rangeStr = `${vNums[0]}~${vNums[vNums.length - 1]}`;
+    let textToCopy = "";
+    if (vNums.length === 1) {
+      textToCopy = selectedVerses[vNums[0]].trim();
+    } else {
+      const fullName = SHORT_TO_FULL[book] || book;
+      const rangeStr = `${vNums[0]}~${vNums[vNums.length - 1]}`;
+      const sortedTexts = vNums.map(v => `${v} ${selectedVerses[v].trim()}`).join('\n');
+      textToCopy = `[${fullName} ${chapter}:${rangeStr}]\n${sortedTexts}`;
     }
-
-    const sortedTexts = vNums.map(v => `${v}절 ${selectedVerses[v]}`).join('\n');
-    const textToCopy = `[${fullName} ${chapter}:${rangeStr}]\n${sortedTexts}`;
 
     navigator.clipboard.writeText(textToCopy)
       .then(() => {
@@ -5452,10 +5455,25 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
                     
                     if (rowBook === book && sp <= chapter && chapter <= ep) {
                         const daysElapsed = count + (chapter - sp) + 1;
-                        const d = new Date(startKST.getTime());
-                        d.setUTCDate(startKST.getUTCDate() + daysElapsed);
-                        if (d instanceof Date && !isNaN(d.getTime())) {
-                            targetDateObj = d;
+                        
+                        // 일요일을 제외하고 daysElapsed 경과한 날짜를 구함
+                        let current = new Date(startKST.getTime());
+                        let elapsedCount = 0;
+                        let targetD = null;
+                        while (true) {
+                            if (current.getUTCDay() !== 0) {
+                                elapsedCount++;
+                                if (elapsedCount === daysElapsed) {
+                                    targetD = new Date(current.getTime());
+                                    break;
+                                }
+                            }
+                            current.setUTCDate(current.getUTCDate() + 1);
+                        }
+
+                        if (targetD && !isNaN(targetD.getTime())) {
+                            // targetDateObj는 currentDate 상태로 세팅되므로 로컬 타임존 기준으로 생성하여 날짜 밀림/요일 꼬임 방지
+                            targetDateObj = new Date(targetD.getUTCFullYear(), targetD.getUTCMonth(), targetD.getUTCDate());
                             targetTab = 'today';
                             found = true;
                         }
@@ -5474,7 +5492,7 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
                         d.setUTCMonth(parseInt(row.month) - 1);
                         d.setUTCDate(parseInt(row.day));
                         if (d instanceof Date && !isNaN(d.getTime())) {
-                            targetDateObj = d;
+                            targetDateObj = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
                             targetTab = 'reading';
                             found = true;
                         }
