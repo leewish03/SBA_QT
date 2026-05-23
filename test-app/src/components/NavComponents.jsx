@@ -147,7 +147,7 @@ export function TopHeader({ currentDate, setCurrentDate, onOpenCalendar, session
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '6px',
+                        padding: '4px',
                         borderRadius: '50%',
                         transition: 'background 0.2s'
                     }}
