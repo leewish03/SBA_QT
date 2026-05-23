@@ -2052,7 +2052,7 @@ function NoteEditor({ targetDate, session }) {
 // ==========================================
 const FloatingBar = styled.div`
   position: fixed;
-  bottom: 80px;
+  bottom: calc(102px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   width: 90%;
