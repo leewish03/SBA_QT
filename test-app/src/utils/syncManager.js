@@ -132,6 +132,7 @@ async function syncNotes(userId) {
   if (error) throw error;
 
   const toUpload = [];
+  const toDeleteDates = [];
   const mergedNotes = { ...localNotes };
 
   // 1. 클라우드 메모를 순회하며 로컬과 병합 (updated_at 타임스탬프 기준)
@@ -141,45 +142,66 @@ async function syncNotes(userId) {
 
     if (!local) {
       // 클라우드에만 존재하는 메모 -> 로컬에 반영
-      mergedNotes[date] = {
-        content: cloud.content,
-        updated_at: cloud.updated_at
-      };
+      if (cloud.content && cloud.content.trim() !== '') {
+        mergedNotes[date] = {
+          content: cloud.content,
+          updated_at: cloud.updated_at
+        };
+      } else {
+        delete mergedNotes[date];
+      }
     } else {
       // 로컬과 클라우드 모두 존재
       const localTime = new Date(local.updated_at || 0).getTime();
       const cloudTime = new Date(cloud.updated_at || 0).getTime();
 
       if (localTime > cloudTime) {
-        // 로컬이 더 최신인 경우 -> 클라우드를 로컬 내용으로 업데이트
-        toUpload.push({
-          user_id: userId,
-          target_date: date,
-          content: local.content,
-          updated_at: local.updated_at
-        });
-        mergedNotes[date] = local;
+        // 로컬이 더 최신인 경우
+        if (!local.content || local.content.trim() === '') {
+          toDeleteDates.push(date);
+          delete mergedNotes[date];
+        } else {
+          // 클라우드를 로컬 내용으로 업데이트
+          toUpload.push({
+            user_id: userId,
+            target_date: date,
+            content: local.content,
+            updated_at: local.updated_at
+          });
+          mergedNotes[date] = local;
+        }
       } else if (cloudTime > localTime) {
-        // 클라우드가 더 최신인 경우 -> 로컬을 클라우드 내용으로 업데이트
-        mergedNotes[date] = {
-          content: cloud.content,
-          updated_at: cloud.updated_at
-        };
+        // 클라우드가 더 최신인 경우
+        if (!cloud.content || cloud.content.trim() === '') {
+          delete mergedNotes[date];
+        } else {
+          mergedNotes[date] = {
+            content: cloud.content,
+            updated_at: cloud.updated_at
+          };
+        }
       } else {
-        // 타임스탬프가 같은 경우 -> 내용 다를 때만 동기화 (더 긴 쪽 우선 폴백)
+        // 타임스탬프가 같은 경우 -> 내용 다를 때만 동기화
         if (local.content !== cloud.content) {
-          if (cloud.content.length > local.content.length) {
-            mergedNotes[date] = {
-              content: cloud.content,
-              updated_at: cloud.updated_at
-            };
+          if (!local.content || local.content.trim() === '') {
+            toDeleteDates.push(date);
+            delete mergedNotes[date];
+          } else if (!cloud.content || cloud.content.trim() === '') {
+            delete mergedNotes[date];
           } else {
-            toUpload.push({
-              user_id: userId,
-              target_date: date,
-              content: local.content,
-              updated_at: local.updated_at
-            });
+            if (cloud.content.length > local.content.length) {
+              mergedNotes[date] = {
+                content: cloud.content,
+                updated_at: cloud.updated_at
+              };
+            } else {
+              toUpload.push({
+                user_id: userId,
+                target_date: date,
+                content: local.content,
+                updated_at: local.updated_at
+              });
+            }
           }
         }
       }
@@ -190,14 +212,31 @@ async function syncNotes(userId) {
   const cloudDates = new Set(cloudNotes.map(n => n.target_date));
   Object.entries(localNotes).forEach(([date, note]) => {
     if (!cloudDates.has(date)) {
-      toUpload.push({
-        user_id: userId,
-        target_date: date,
-        content: note.content,
-        updated_at: note.updated_at || new Date().toISOString()
-      });
+      if (!note.content || note.content.trim() === '') {
+        delete mergedNotes[date];
+      } else {
+        toUpload.push({
+          user_id: userId,
+          target_date: date,
+          content: note.content,
+          updated_at: note.updated_at || new Date().toISOString()
+        });
+      }
     }
   });
+
+  // 클라우드 삭제 (100개 청크 단위)
+  if (toDeleteDates.length > 0) {
+    const chunks = chunkArray(toDeleteDates, 100);
+    for (const chunk of chunks) {
+      const { error: deleteError } = await supabase
+        .from('qt_notes')
+        .delete()
+        .eq('user_id', userId)
+        .in('target_date', chunk);
+      if (deleteError) throw deleteError;
+    }
+  }
 
   // 클라우드 업서트 (100개 청크 단위)
   if (toUpload.length > 0) {
@@ -209,6 +248,13 @@ async function syncNotes(userId) {
       if (upsertError) throw upsertError;
     }
   }
+
+  // 최종 확인: 로컬 스토리지에 빈 메모들이 남아있지 않도록 제거
+  Object.keys(mergedNotes).forEach(date => {
+    if (!mergedNotes[date] || !mergedNotes[date].content || mergedNotes[date].content.trim() === '') {
+      delete mergedNotes[date];
+    }
+  });
 
   // 로컬 스토리지 최종 갱신
   localStorage.setItem('sba_qt_notes', JSON.stringify(mergedNotes));

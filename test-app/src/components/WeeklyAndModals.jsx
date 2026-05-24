@@ -803,15 +803,19 @@ const NoteIndicator = styled.span`
 
 const isValidDate = (d) => d instanceof Date && !isNaN(d.getTime());
 
-export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
+export function CalendarModal({ isOpen, onClose, currentDate, onSetDate, dailyPlans }) {
+    const [mode, setMode] = useState('weekly'); // 'weekly' | 'calendar'
     const [noteDates, setNoteDates] = useState(new Set());
     const [viewDate, setViewDate] = useState(() => {
         return isValidDate(currentDate) ? new Date(currentDate) : getEffectiveDate();
     });
 
     useEffect(() => {
-        if (isOpen && isValidDate(currentDate)) {
-            setViewDate(new Date(currentDate));
+        if (isOpen) {
+            setMode('weekly');
+            if (isValidDate(currentDate)) {
+                setViewDate(new Date(currentDate));
+            }
         }
     }, [isOpen, currentDate]);
 
@@ -865,62 +869,155 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
 
     return (
         <ModalOverlay onClick={onClose}>
-            <ModalContent onClick={e => e.stopPropagation()} $maxWidth="360px">
-                <ModalHeader>
-                    <ModalTitle>
-                        날짜 이동
-                        <span style={{fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--sba-text-muted)'}}>• 점(·) 표시: 메모 있음</span>
-                    </ModalTitle>
-                    <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
-                </ModalHeader>
-                
-                <CalendarHeader>
-                    <CalendarNavButton onClick={prevMonth}>◀</CalendarNavButton>
-                    <CalendarTitleText>{year}년 {month + 1}월</CalendarTitleText>
-                    <CalendarNavButton onClick={nextMonth}>▶</CalendarNavButton>
-                </CalendarHeader>
- 
-                <CalendarGrid>
-                    {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
-                        <WeekdayHeader key={d} $isSunday={i === 0} $isSaturday={i === 6}>{d}</WeekdayHeader>
-                    ))}
-                    
-                    {days.map((date, idx) => {
-                        if (!date) return <div key={`empty-${idx}`} />;
+            <ModalContent onClick={e => e.stopPropagation()} $maxWidth={mode === 'weekly' ? '440px' : '360px'}>
+                {mode === 'weekly' ? (
+                    <>
+                        <ModalHeader>
+                            <ModalTitle>주간 일정 요약</ModalTitle>
+                            <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                        </ModalHeader>
                         
-                        const dateStr = safeToISODateString(date);
-                        const isSelected = dateStr === safeToISODateString(safeCurrentDate);
-                        const hasNote = noteDates.has(dateStr);
+                        <div className="sba-weekly-list-modal" style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '55vh', overflowY: 'auto', paddingRight: '4px' }}>
+                            {dailyPlans && Object.entries(dailyPlans).map(([dKey, plan]) => {
+                                const actualToday = getEffectiveDate();
+                                const tMonth = actualToday.getMonth() + 1;
+                                const tDay = actualToday.getDate();
+                                const realTodayKey = `${String(tMonth).padStart(2, '0')}.${String(tDay).padStart(2, '0')}`;
+
+                                const dMonth = safeCurrentDate.getMonth() + 1;
+                                const dDay = safeCurrentDate.getDate();
+                                const currentKey = `${String(dMonth).padStart(2, '0')}.${String(dDay).padStart(2, '0')}`;
+
+                                const isRealToday = dKey === realTodayKey;
+                                const isSelected = dKey === currentKey;
+                                const dateStr = plan.dateObj.toISOString().split('T')[0];
+                                const hasNote = noteDates.has(dateStr);
+                                
+                                return (
+                                    <div 
+                                        key={dKey} 
+                                        className={`sba-weekly-card-modal ${isSelected ? 'selected' : ''} ${isRealToday ? 'today' : ''}`}
+                                        onClick={() => handleSelectDate(plan.dateObj)}
+                                        style={{
+                                            padding: '12px 14px',
+                                            borderRadius: '10px',
+                                            border: isSelected ? '1.5px solid var(--sba-text)' : '1px solid var(--sba-border-strong)',
+                                            background: isSelected ? 'var(--sba-card-active)' : 'var(--sba-card-bg)',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s ease',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '8px',
+                                            boxShadow: isSelected ? '0 4px 12px rgba(0, 0, 0, 0.05)' : 'none'
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--sba-text)' }}>
+                                                [{plan.dayName[0]}] {dKey}
+                                            </span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                {hasNote && (
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--sba-text-secondary)' }}>
+                                                        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                                                    </svg>
+                                                )}
+                                                {isRealToday && <span style={{ fontSize: '0.7rem', background: 'var(--sba-text)', color: 'var(--sba-bg)', padding: '1px 6px', borderRadius: '8px', fontWeight: '600' }}>오늘</span>}
+                                                {isSelected && !isRealToday && <span style={{ fontSize: '0.7rem', background: 'var(--sba-text-secondary)', color: 'var(--sba-bg)', padding: '1px 6px', borderRadius: '8px', fontWeight: '600' }}>선택됨</span>}
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem' }}>
+                                            <div style={{ flex: 1, background: 'var(--sba-card-sub-bg)', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--sba-border)', display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ color: 'var(--sba-text-muted)', fontSize: '0.65rem', fontWeight: '600' }}>묵상</span>
+                                                <span style={{ color: 'var(--sba-text)', fontWeight: '500', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {plan.old ? `${SHORT_TO_FULL[plan.old.abbrev] || plan.old.abbrev} ${plan.old.verse}장` : '일정 없음'}
+                                                </span>
+                                            </div>
+                                            <div style={{ flex: 1, background: 'var(--sba-card-sub-bg)', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--sba-border)', display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ color: 'var(--sba-text-muted)', fontSize: '0.65rem', fontWeight: '600' }}>통독</span>
+                                                <span style={{ color: 'var(--sba-text)', fontWeight: '500', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {plan.new ? `${plan.new.books.map(b => SHORT_TO_FULL[b] || b).join(', ')} ${plan.new.verseRaw}장` : '일정 없음'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                         
-                        return (
-                            <CalendarDayCell 
-                                key={dateStr}
-                                onClick={() => handleSelectDate(date)}
-                                $isSelected={isSelected}
-                            >
-                                {date.getDate()}
-                                {hasNote && (
-                                    <NoteIndicator $isSelected={isSelected} />
-                                )}
-                            </CalendarDayCell>
-                        );
-                    })}
-                </CalendarGrid>
- 
-                <ButtonGroup>
-                    <ShadButton 
-                        $variant="outline"
-                        onClick={() => {
-                            onSetDate(getEffectiveDate());
-                            onClose();
-                        }}
-                    >
-                        오늘 날짜로 복귀
-                    </ShadButton>
-                    <ShadButton onClick={onClose}>
-                        취소
-                    </ShadButton>
-                </ButtonGroup>
+                        <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <ShadButton $variant="outline" onClick={() => setMode('calendar')}>
+                                📅 달력에서 선택하기
+                            </ShadButton>
+                            <ShadButton onClick={onClose}>
+                                닫기
+                            </ShadButton>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <ModalHeader>
+                            <ModalTitle>
+                                날짜 이동 (달력)
+                                <span style={{fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--sba-text-muted)'}}>• 점(·) 표시: 메모 있음</span>
+                            </ModalTitle>
+                            <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                        </ModalHeader>
+                        
+                        <CalendarHeader>
+                            <CalendarNavButton onClick={prevMonth}>◀</CalendarNavButton>
+                            <CalendarTitleText>{year}년 {month + 1}월</CalendarTitleText>
+                            <CalendarNavButton onClick={nextMonth}>▶</CalendarNavButton>
+                        </CalendarHeader>
+         
+                        <CalendarGrid>
+                            {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
+                                <WeekdayHeader key={d} $isSunday={i === 0} $isSaturday={i === 6}>{d}</WeekdayHeader>
+                            ))}
+                            
+                            {days.map((date, idx) => {
+                                if (!date) return <div key={`empty-${idx}`} />;
+                                
+                                const dateStr = safeToISODateString(date);
+                                const isSelected = dateStr === safeToISODateString(safeCurrentDate);
+                                const hasNote = noteDates.has(dateStr);
+                                
+                                return (
+                                    <CalendarDayCell 
+                                        key={dateStr}
+                                        onClick={() => handleSelectDate(date)}
+                                        $isSelected={isSelected}
+                                    >
+                                        {date.getDate()}
+                                        {hasNote && (
+                                            <NoteIndicator $isSelected={isSelected} />
+                                        )}
+                                    </CalendarDayCell>
+                                );
+                            })}
+                        </CalendarGrid>
+         
+                        <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <ShadButton $variant="outline" onClick={() => setMode('weekly')} style={{ flex: 1 }}>
+                                    📋 주간 일정 보기
+                                </ShadButton>
+                                <ShadButton 
+                                    $variant="outline"
+                                    onClick={() => {
+                                        onSetDate(getEffectiveDate());
+                                        onClose();
+                                    }}
+                                    style={{ flex: 1 }}
+                                >
+                                    오늘 날짜 복귀
+                                </ShadButton>
+                            </div>
+                            <ShadButton onClick={onClose}>
+                                취소
+                            </ShadButton>
+                        </div>
+                    </>
+                )}
             </ModalContent>
         </ModalOverlay>
     );

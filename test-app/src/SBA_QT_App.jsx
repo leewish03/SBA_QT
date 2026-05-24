@@ -510,14 +510,7 @@ export default function SBA_QT_App() {
                         onOpenAuthModal={() => setShowAuth(true)}
                     />
                 );
-            case 'weekly':
-                return (
-                    <TabWeekly 
-                        dailyPlans={dailyPlans} 
-                        currentDate={effectiveDate} 
-                        onCardClick={handleWeekCardClick} 
-                    />
-                );
+
             case 'sharing':
                 return (
                     <>
@@ -580,6 +573,7 @@ export default function SBA_QT_App() {
                 onClose={() => setShowCalendar(false)} 
                 currentDate={effectiveDate} 
                 onSetDate={handleSetDate} 
+                dailyPlans={dailyPlans}
             />
             
             <SettingsModal 

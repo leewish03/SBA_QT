@@ -232,27 +232,43 @@ function NoteEditor({ targetDate, session }) {
     if (session) {
       supabase
         .from('qt_notes')
-        .select('content')
+        .select('content, updated_at')
         .eq('user_id', session.user.id)
         .eq('target_date', dateStr)
         .single()
         .then(({ data, error }) => {
           if (data && !isDirtyRef.current) {
-            setContent(data.content || '');
+            let localTime = 0;
             try {
               const raw = localStorage.getItem('sba_qt_notes');
-              const parsed = raw ? JSON.parse(raw) : {};
-              if (!data.content || data.content.trim() === '') {
-                delete parsed[dateStr];
-              } else {
-                parsed[dateStr] = {
-                  content: data.content,
-                  updated_at: new Date().toISOString()
-                };
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed[dateStr] && parsed[dateStr].updated_at) {
+                  localTime = new Date(parsed[dateStr].updated_at).getTime();
+                }
               }
-              localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
             } catch (e) {
               console.error(e);
+            }
+
+            const cloudTime = new Date(data.updated_at || 0).getTime();
+            if (cloudTime >= localTime) {
+              setContent(data.content || '');
+              try {
+                const raw = localStorage.getItem('sba_qt_notes');
+                const parsed = raw ? JSON.parse(raw) : {};
+                if (!data.content || data.content.trim() === '') {
+                  delete parsed[dateStr];
+                } else {
+                  parsed[dateStr] = {
+                    content: data.content,
+                    updated_at: data.updated_at || new Date().toISOString()
+                  };
+                }
+                localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
+              } catch (e) {
+                console.error(e);
+              }
             }
           }
         });
@@ -266,14 +282,10 @@ function NoteEditor({ targetDate, session }) {
     try {
       const raw = localStorage.getItem('sba_qt_notes');
       const parsed = raw ? JSON.parse(raw) : {};
-      if (!text || text.trim() === '') {
-        delete parsed[dateStr];
-      } else {
-        parsed[dateStr] = {
-          content: text,
-          updated_at: now
-        };
-      }
+      parsed[dateStr] = {
+        content: text || '',
+        updated_at: now
+      };
       localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
     } catch (e) {
       console.error('로컬 메모 저장 실패:', e);
@@ -335,14 +347,10 @@ function NoteEditor({ targetDate, session }) {
         try {
           const raw = localStorage.getItem('sba_qt_notes');
           const parsed = raw ? JSON.parse(raw) : {};
-          if (!text || text.trim() === '') {
-            delete parsed[dateStr];
-          } else {
-            parsed[dateStr] = {
-              content: text,
-              updated_at: now
-            };
-          }
+          parsed[dateStr] = {
+            content: text || '',
+            updated_at: now
+          };
           localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
         } catch (e) {
           console.error(e);

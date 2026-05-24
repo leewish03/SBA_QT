@@ -747,7 +747,7 @@ const SbaStyledWrapper = styled.div`
 
 /* 구절 선택 액션바 활성화 시 오늘의 메모 플로팅 버튼을 위로 회피시킴 */
 .sba-app-container:has(.sba-floating-bar) .sba-memo-float-btn {
-    bottom: calc(192px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(154px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
 `;
@@ -1169,6 +1169,7 @@ async function syncNotes(userId) {
   if (error) throw error;
 
   const toUpload = [];
+  const toDeleteDates = [];
   const mergedNotes = { ...localNotes };
 
   // 1. 클라우드 메모를 순회하며 로컬과 병합 (updated_at 타임스탬프 기준)
@@ -1178,45 +1179,66 @@ async function syncNotes(userId) {
 
     if (!local) {
       // 클라우드에만 존재하는 메모 -> 로컬에 반영
-      mergedNotes[date] = {
-        content: cloud.content,
-        updated_at: cloud.updated_at
-      };
+      if (cloud.content && cloud.content.trim() !== '') {
+        mergedNotes[date] = {
+          content: cloud.content,
+          updated_at: cloud.updated_at
+        };
+      } else {
+        delete mergedNotes[date];
+      }
     } else {
       // 로컬과 클라우드 모두 존재
       const localTime = new Date(local.updated_at || 0).getTime();
       const cloudTime = new Date(cloud.updated_at || 0).getTime();
 
       if (localTime > cloudTime) {
-        // 로컬이 더 최신인 경우 -> 클라우드를 로컬 내용으로 업데이트
-        toUpload.push({
-          user_id: userId,
-          target_date: date,
-          content: local.content,
-          updated_at: local.updated_at
-        });
-        mergedNotes[date] = local;
+        // 로컬이 더 최신인 경우
+        if (!local.content || local.content.trim() === '') {
+          toDeleteDates.push(date);
+          delete mergedNotes[date];
+        } else {
+          // 클라우드를 로컬 내용으로 업데이트
+          toUpload.push({
+            user_id: userId,
+            target_date: date,
+            content: local.content,
+            updated_at: local.updated_at
+          });
+          mergedNotes[date] = local;
+        }
       } else if (cloudTime > localTime) {
-        // 클라우드가 더 최신인 경우 -> 로컬을 클라우드 내용으로 업데이트
-        mergedNotes[date] = {
-          content: cloud.content,
-          updated_at: cloud.updated_at
-        };
+        // 클라우드가 더 최신인 경우
+        if (!cloud.content || cloud.content.trim() === '') {
+          delete mergedNotes[date];
+        } else {
+          mergedNotes[date] = {
+            content: cloud.content,
+            updated_at: cloud.updated_at
+          };
+        }
       } else {
-        // 타임스탬프가 같은 경우 -> 내용 다를 때만 동기화 (더 긴 쪽 우선 폴백)
+        // 타임스탬프가 같은 경우 -> 내용 다를 때만 동기화
         if (local.content !== cloud.content) {
-          if (cloud.content.length > local.content.length) {
-            mergedNotes[date] = {
-              content: cloud.content,
-              updated_at: cloud.updated_at
-            };
+          if (!local.content || local.content.trim() === '') {
+            toDeleteDates.push(date);
+            delete mergedNotes[date];
+          } else if (!cloud.content || cloud.content.trim() === '') {
+            delete mergedNotes[date];
           } else {
-            toUpload.push({
-              user_id: userId,
-              target_date: date,
-              content: local.content,
-              updated_at: local.updated_at
-            });
+            if (cloud.content.length > local.content.length) {
+              mergedNotes[date] = {
+                content: cloud.content,
+                updated_at: cloud.updated_at
+              };
+            } else {
+              toUpload.push({
+                user_id: userId,
+                target_date: date,
+                content: local.content,
+                updated_at: local.updated_at
+              });
+            }
           }
         }
       }
@@ -1227,14 +1249,31 @@ async function syncNotes(userId) {
   const cloudDates = new Set(cloudNotes.map(n => n.target_date));
   Object.entries(localNotes).forEach(([date, note]) => {
     if (!cloudDates.has(date)) {
-      toUpload.push({
-        user_id: userId,
-        target_date: date,
-        content: note.content,
-        updated_at: note.updated_at || new Date().toISOString()
-      });
+      if (!note.content || note.content.trim() === '') {
+        delete mergedNotes[date];
+      } else {
+        toUpload.push({
+          user_id: userId,
+          target_date: date,
+          content: note.content,
+          updated_at: note.updated_at || new Date().toISOString()
+        });
+      }
     }
   });
+
+  // 클라우드 삭제 (100개 청크 단위)
+  if (toDeleteDates.length > 0) {
+    const chunks = chunkArray(toDeleteDates, 100);
+    for (const chunk of chunks) {
+      const { error: deleteError } = await supabase
+        .from('qt_notes')
+        .delete()
+        .eq('user_id', userId)
+        .in('target_date', chunk);
+      if (deleteError) throw deleteError;
+    }
+  }
 
   // 클라우드 업서트 (100개 청크 단위)
   if (toUpload.length > 0) {
@@ -1246,6 +1285,13 @@ async function syncNotes(userId) {
       if (upsertError) throw upsertError;
     }
   }
+
+  // 최종 확인: 로컬 스토리지에 빈 메모들이 남아있지 않도록 제거
+  Object.keys(mergedNotes).forEach(date => {
+    if (!mergedNotes[date] || !mergedNotes[date].content || mergedNotes[date].content.trim() === '') {
+      delete mergedNotes[date];
+    }
+  });
 
   // 로컬 스토리지 최종 갱신
   localStorage.setItem('sba_qt_notes', JSON.stringify(mergedNotes));
@@ -1612,7 +1658,6 @@ function BottomNav({ activeTab, setActiveTab }) {
         { id: 'today', icon: ICONS.today, label: '묵상' },
         { id: 'reading', icon: ICONS.reading, label: '통독' },
         { id: 'bookmarks', icon: ICONS.bookmarks, label: '기록' },
-        { id: 'weekly', icon: ICONS.weekly, label: '주간' },
         { id: 'sharing', icon: ICONS.sharing, label: '나눔' },
     ];
 
@@ -1870,27 +1915,43 @@ function NoteEditor({ targetDate, session }) {
     if (session) {
       supabase
         .from('qt_notes')
-        .select('content')
+        .select('content, updated_at')
         .eq('user_id', session.user.id)
         .eq('target_date', dateStr)
         .single()
         .then(({ data, error }) => {
           if (data && !isDirtyRef.current) {
-            setContent(data.content || '');
+            let localTime = 0;
             try {
               const raw = localStorage.getItem('sba_qt_notes');
-              const parsed = raw ? JSON.parse(raw) : {};
-              if (!data.content || data.content.trim() === '') {
-                delete parsed[dateStr];
-              } else {
-                parsed[dateStr] = {
-                  content: data.content,
-                  updated_at: new Date().toISOString()
-                };
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed[dateStr] && parsed[dateStr].updated_at) {
+                  localTime = new Date(parsed[dateStr].updated_at).getTime();
+                }
               }
-              localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
             } catch (e) {
               console.error(e);
+            }
+
+            const cloudTime = new Date(data.updated_at || 0).getTime();
+            if (cloudTime >= localTime) {
+              setContent(data.content || '');
+              try {
+                const raw = localStorage.getItem('sba_qt_notes');
+                const parsed = raw ? JSON.parse(raw) : {};
+                if (!data.content || data.content.trim() === '') {
+                  delete parsed[dateStr];
+                } else {
+                  parsed[dateStr] = {
+                    content: data.content,
+                    updated_at: data.updated_at || new Date().toISOString()
+                  };
+                }
+                localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
+              } catch (e) {
+                console.error(e);
+              }
             }
           }
         });
@@ -1904,14 +1965,10 @@ function NoteEditor({ targetDate, session }) {
     try {
       const raw = localStorage.getItem('sba_qt_notes');
       const parsed = raw ? JSON.parse(raw) : {};
-      if (!text || text.trim() === '') {
-        delete parsed[dateStr];
-      } else {
-        parsed[dateStr] = {
-          content: text,
-          updated_at: now
-        };
-      }
+      parsed[dateStr] = {
+        content: text || '',
+        updated_at: now
+      };
       localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
     } catch (e) {
       console.error('로컬 메모 저장 실패:', e);
@@ -1973,14 +2030,10 @@ function NoteEditor({ targetDate, session }) {
         try {
           const raw = localStorage.getItem('sba_qt_notes');
           const parsed = raw ? JSON.parse(raw) : {};
-          if (!text || text.trim() === '') {
-            delete parsed[dateStr];
-          } else {
-            parsed[dateStr] = {
-              content: text,
-              updated_at: now
-            };
-          }
+          parsed[dateStr] = {
+            content: text || '',
+            updated_at: now
+          };
           localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
         } catch (e) {
           console.error(e);
@@ -4949,15 +5002,19 @@ const NoteIndicator = styled.span`
 
 const isValidDate = (d) => d instanceof Date && !isNaN(d.getTime());
 
-function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
+function CalendarModal({ isOpen, onClose, currentDate, onSetDate, dailyPlans }) {
+    const [mode, setMode] = useState('weekly'); // 'weekly' | 'calendar'
     const [noteDates, setNoteDates] = useState(new Set());
     const [viewDate, setViewDate] = useState(() => {
         return isValidDate(currentDate) ? new Date(currentDate) : getEffectiveDate();
     });
 
     useEffect(() => {
-        if (isOpen && isValidDate(currentDate)) {
-            setViewDate(new Date(currentDate));
+        if (isOpen) {
+            setMode('weekly');
+            if (isValidDate(currentDate)) {
+                setViewDate(new Date(currentDate));
+            }
         }
     }, [isOpen, currentDate]);
 
@@ -5011,62 +5068,155 @@ function CalendarModal({ isOpen, onClose, currentDate, onSetDate }) {
 
     return (
         <ModalOverlay onClick={onClose}>
-            <ModalContent onClick={e => e.stopPropagation()} $maxWidth="360px">
-                <ModalHeader>
-                    <ModalTitle>
-                        날짜 이동
-                        <span style={{fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--sba-text-muted)'}}>• 점(·) 표시: 메모 있음</span>
-                    </ModalTitle>
-                    <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
-                </ModalHeader>
-                
-                <CalendarHeader>
-                    <CalendarNavButton onClick={prevMonth}>◀</CalendarNavButton>
-                    <CalendarTitleText>{year}년 {month + 1}월</CalendarTitleText>
-                    <CalendarNavButton onClick={nextMonth}>▶</CalendarNavButton>
-                </CalendarHeader>
- 
-                <CalendarGrid>
-                    {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
-                        <WeekdayHeader key={d} $isSunday={i === 0} $isSaturday={i === 6}>{d}</WeekdayHeader>
-                    ))}
-                    
-                    {days.map((date, idx) => {
-                        if (!date) return <div key={`empty-${idx}`} />;
+            <ModalContent onClick={e => e.stopPropagation()} $maxWidth={mode === 'weekly' ? '440px' : '360px'}>
+                {mode === 'weekly' ? (
+                    <>
+                        <ModalHeader>
+                            <ModalTitle>주간 일정 요약</ModalTitle>
+                            <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                        </ModalHeader>
                         
-                        const dateStr = safeToISODateString(date);
-                        const isSelected = dateStr === safeToISODateString(safeCurrentDate);
-                        const hasNote = noteDates.has(dateStr);
+                        <div className="sba-weekly-list-modal" style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '55vh', overflowY: 'auto', paddingRight: '4px' }}>
+                            {dailyPlans && Object.entries(dailyPlans).map(([dKey, plan]) => {
+                                const actualToday = getEffectiveDate();
+                                const tMonth = actualToday.getMonth() + 1;
+                                const tDay = actualToday.getDate();
+                                const realTodayKey = `${String(tMonth).padStart(2, '0')}.${String(tDay).padStart(2, '0')}`;
+
+                                const dMonth = safeCurrentDate.getMonth() + 1;
+                                const dDay = safeCurrentDate.getDate();
+                                const currentKey = `${String(dMonth).padStart(2, '0')}.${String(dDay).padStart(2, '0')}`;
+
+                                const isRealToday = dKey === realTodayKey;
+                                const isSelected = dKey === currentKey;
+                                const dateStr = plan.dateObj.toISOString().split('T')[0];
+                                const hasNote = noteDates.has(dateStr);
+                                
+                                return (
+                                    <div 
+                                        key={dKey} 
+                                        className={`sba-weekly-card-modal ${isSelected ? 'selected' : ''} ${isRealToday ? 'today' : ''}`}
+                                        onClick={() => handleSelectDate(plan.dateObj)}
+                                        style={{
+                                            padding: '12px 14px',
+                                            borderRadius: '10px',
+                                            border: isSelected ? '1.5px solid var(--sba-text)' : '1px solid var(--sba-border-strong)',
+                                            background: isSelected ? 'var(--sba-card-active)' : 'var(--sba-card-bg)',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s ease',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '8px',
+                                            boxShadow: isSelected ? '0 4px 12px rgba(0, 0, 0, 0.05)' : 'none'
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--sba-text)' }}>
+                                                [{plan.dayName[0]}] {dKey}
+                                            </span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                {hasNote && (
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--sba-text-secondary)' }}>
+                                                        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                                                    </svg>
+                                                )}
+                                                {isRealToday && <span style={{ fontSize: '0.7rem', background: 'var(--sba-text)', color: 'var(--sba-bg)', padding: '1px 6px', borderRadius: '8px', fontWeight: '600' }}>오늘</span>}
+                                                {isSelected && !isRealToday && <span style={{ fontSize: '0.7rem', background: 'var(--sba-text-secondary)', color: 'var(--sba-bg)', padding: '1px 6px', borderRadius: '8px', fontWeight: '600' }}>선택됨</span>}
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem' }}>
+                                            <div style={{ flex: 1, background: 'var(--sba-card-sub-bg)', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--sba-border)', display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ color: 'var(--sba-text-muted)', fontSize: '0.65rem', fontWeight: '600' }}>묵상</span>
+                                                <span style={{ color: 'var(--sba-text)', fontWeight: '500', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {plan.old ? `${SHORT_TO_FULL[plan.old.abbrev] || plan.old.abbrev} ${plan.old.verse}장` : '일정 없음'}
+                                                </span>
+                                            </div>
+                                            <div style={{ flex: 1, background: 'var(--sba-card-sub-bg)', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--sba-border)', display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ color: 'var(--sba-text-muted)', fontSize: '0.65rem', fontWeight: '600' }}>통독</span>
+                                                <span style={{ color: 'var(--sba-text)', fontWeight: '500', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {plan.new ? `${plan.new.books.map(b => SHORT_TO_FULL[b] || b).join(', ')} ${plan.new.verseRaw}장` : '일정 없음'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                         
-                        return (
-                            <CalendarDayCell 
-                                key={dateStr}
-                                onClick={() => handleSelectDate(date)}
-                                $isSelected={isSelected}
-                            >
-                                {date.getDate()}
-                                {hasNote && (
-                                    <NoteIndicator $isSelected={isSelected} />
-                                )}
-                            </CalendarDayCell>
-                        );
-                    })}
-                </CalendarGrid>
- 
-                <ButtonGroup>
-                    <ShadButton 
-                        $variant="outline"
-                        onClick={() => {
-                            onSetDate(getEffectiveDate());
-                            onClose();
-                        }}
-                    >
-                        오늘 날짜로 복귀
-                    </ShadButton>
-                    <ShadButton onClick={onClose}>
-                        취소
-                    </ShadButton>
-                </ButtonGroup>
+                        <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <ShadButton $variant="outline" onClick={() => setMode('calendar')}>
+                                📅 달력에서 선택하기
+                            </ShadButton>
+                            <ShadButton onClick={onClose}>
+                                닫기
+                            </ShadButton>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <ModalHeader>
+                            <ModalTitle>
+                                날짜 이동 (달력)
+                                <span style={{fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--sba-text-muted)'}}>• 점(·) 표시: 메모 있음</span>
+                            </ModalTitle>
+                            <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                        </ModalHeader>
+                        
+                        <CalendarHeader>
+                            <CalendarNavButton onClick={prevMonth}>◀</CalendarNavButton>
+                            <CalendarTitleText>{year}년 {month + 1}월</CalendarTitleText>
+                            <CalendarNavButton onClick={nextMonth}>▶</CalendarNavButton>
+                        </CalendarHeader>
+         
+                        <CalendarGrid>
+                            {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
+                                <WeekdayHeader key={d} $isSunday={i === 0} $isSaturday={i === 6}>{d}</WeekdayHeader>
+                            ))}
+                            
+                            {days.map((date, idx) => {
+                                if (!date) return <div key={`empty-${idx}`} />;
+                                
+                                const dateStr = safeToISODateString(date);
+                                const isSelected = dateStr === safeToISODateString(safeCurrentDate);
+                                const hasNote = noteDates.has(dateStr);
+                                
+                                return (
+                                    <CalendarDayCell 
+                                        key={dateStr}
+                                        onClick={() => handleSelectDate(date)}
+                                        $isSelected={isSelected}
+                                    >
+                                        {date.getDate()}
+                                        {hasNote && (
+                                            <NoteIndicator $isSelected={isSelected} />
+                                        )}
+                                    </CalendarDayCell>
+                                );
+                            })}
+                        </CalendarGrid>
+         
+                        <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <ShadButton $variant="outline" onClick={() => setMode('weekly')} style={{ flex: 1 }}>
+                                    📋 주간 일정 보기
+                                </ShadButton>
+                                <ShadButton 
+                                    $variant="outline"
+                                    onClick={() => {
+                                        onSetDate(getEffectiveDate());
+                                        onClose();
+                                    }}
+                                    style={{ flex: 1 }}
+                                >
+                                    오늘 날짜 복귀
+                                </ShadButton>
+                            </div>
+                            <ShadButton onClick={onClose}>
+                                취소
+                            </ShadButton>
+                        </div>
+                    </>
+                )}
             </ModalContent>
         </ModalOverlay>
     );
@@ -5661,14 +5811,7 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
                         onOpenAuthModal={() => setShowAuth(true)}
                     />
                 );
-            case 'weekly':
-                return (
-                    <TabWeekly 
-                        dailyPlans={dailyPlans} 
-                        currentDate={effectiveDate} 
-                        onCardClick={handleWeekCardClick} 
-                    />
-                );
+
             case 'sharing':
                 return (
                     <>
@@ -5732,6 +5875,7 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
                 onClose={() => setShowCalendar(false)} 
                 currentDate={effectiveDate} 
                 onSetDate={handleSetDate} 
+                dailyPlans={dailyPlans}
             />
             
             <SettingsModal 
