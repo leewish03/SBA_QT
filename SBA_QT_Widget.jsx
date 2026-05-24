@@ -747,7 +747,7 @@ const SbaStyledWrapper = styled.div`
 
 /* 구절 선택 액션바 활성화 시 오늘의 메모 플로팅 버튼을 위로 회피시킴 */
 .sba-app-container:has(.sba-floating-bar) .sba-memo-float-btn {
-    bottom: calc(154px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(166px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
 `;
@@ -4318,12 +4318,13 @@ const ButtonGroup = styled.div`
 
 const ShadButton = styled.button`
   flex: 1;
-  padding: 10px 16px;
-  font-size: 0.9rem;
+  padding: 10px 12px;
+  font-size: 0.85rem;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
   border: 1px solid ${props => props.$variant === 'outline' ? 'var(--sba-border-strong)' : 'transparent'};
   background: ${props => {
     if (props.$variant === 'outline') return 'transparent';
@@ -5145,7 +5146,7 @@ function CalendarModal({ isOpen, onClose, currentDate, onSetDate, dailyPlans }) 
                         
                         <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <ShadButton $variant="outline" onClick={() => setMode('calendar')}>
-                                📅 달력에서 선택하기
+                                달력에서 선택하기
                             </ShadButton>
                             <ShadButton onClick={onClose}>
                                 닫기
@@ -5198,7 +5199,7 @@ function CalendarModal({ isOpen, onClose, currentDate, onSetDate, dailyPlans }) 
                         <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <div style={{ display: 'flex', gap: '6px' }}>
                                 <ShadButton $variant="outline" onClick={() => setMode('weekly')} style={{ flex: 1 }}>
-                                    📋 주간 일정 보기
+                                    주간 일정
                                 </ShadButton>
                                 <ShadButton 
                                     $variant="outline"

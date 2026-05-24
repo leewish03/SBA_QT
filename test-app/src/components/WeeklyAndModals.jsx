@@ -119,12 +119,13 @@ const ButtonGroup = styled.div`
 
 const ShadButton = styled.button`
   flex: 1;
-  padding: 10px 16px;
-  font-size: 0.9rem;
+  padding: 10px 12px;
+  font-size: 0.85rem;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
   border: 1px solid ${props => props.$variant === 'outline' ? 'var(--sba-border-strong)' : 'transparent'};
   background: ${props => {
     if (props.$variant === 'outline') return 'transparent';
@@ -946,7 +947,7 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate, dailyPl
                         
                         <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <ShadButton $variant="outline" onClick={() => setMode('calendar')}>
-                                📅 달력에서 선택하기
+                                달력에서 선택하기
                             </ShadButton>
                             <ShadButton onClick={onClose}>
                                 닫기
@@ -999,7 +1000,7 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate, dailyPl
                         <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <div style={{ display: 'flex', gap: '6px' }}>
                                 <ShadButton $variant="outline" onClick={() => setMode('weekly')} style={{ flex: 1 }}>
-                                    📋 주간 일정 보기
+                                    주간 일정
                                 </ShadButton>
                                 <ShadButton 
                                     $variant="outline"
