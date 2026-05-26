@@ -200,7 +200,13 @@ export function TabWeekly({ dailyPlans, currentDate, onCardClick }) {
                             <div className="sba-weekly-card-header">
                                 <span>[{plan.dayName[0]}] {dKey}</span>
                                 <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
-                                    {hasNote && <span title="메모 작성됨" style={{fontSize:'0.9rem'}}>✏️</span>}
+                                    {hasNote && (
+                                        <span title="메모 작성됨" style={{ display: 'flex', alignItems: 'center' }}>
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--sba-text-secondary)' }}>
+                                                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                                            </svg>
+                                        </span>
+                                    )}
                                     {isRealToday && <span style={{fontSize:'0.75rem', background:'var(--sba-text)', color:'var(--sba-bg)', padding:'2px 8px', borderRadius:'12px'}}>오늘</span>}
                                     {isSelected && !isRealToday && <span style={{fontSize:'0.75rem', background:'var(--sba-text-secondary)', color:'var(--sba-bg)', padding:'2px 8px', borderRadius:'12px'}}>선택됨</span>}
                                 </div>
