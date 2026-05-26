@@ -381,22 +381,27 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
         return localStorage.getItem('sba_qt_alarm_time') || '08:00';
     });
 
-    const [alarmHour, alarmMinute] = alarmTime.split(':');
+    // 텔레그램 연동 상태 정의
+    const [telegramChatId, setTelegramChatId] = useState('');
+    const [telegramAlarmTime, setTelegramAlarmTime] = useState('08:00');
+    const [telegramEnabled, setTelegramEnabled] = useState(false);
+    const [isTesting, setIsTesting] = useState(false);
 
-    // 세션이 유효할 때 클라우드 메타데이터가 변경되면 알림 상태 동기화
-    useEffect(() => {
-        if (session && session.user && session.user.user_metadata) {
-            const meta = session.user.user_metadata;
-            if (meta.sba_qt_alarm_enabled !== undefined) {
-                setAlarmEnabled(meta.sba_qt_alarm_enabled);
-                localStorage.setItem('sba_qt_alarm_enabled', String(meta.sba_qt_alarm_enabled));
-            }
-            if (meta.sba_qt_alarm_time) {
-                setAlarmTime(meta.sba_qt_alarm_time);
-                localStorage.setItem('sba_qt_alarm_time', meta.sba_qt_alarm_time);
-            }
+    const [alarmHour, alarmMinute] = alarmTime.split(':');
+    const [tgHour, tgMinute] = telegramAlarmTime.split(':');
+
+    const urlBase64ToUint8Array = (base64String) => {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding)
+            .replace(/\-/g, '+')
+            .replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
         }
-    }, [session]);
+        return outputArray;
+    };
 
     const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
 
@@ -407,6 +412,26 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
             document.documentElement.style.setProperty('--sba-bible-font-size', `${next.toFixed(1)}px`);
             return next;
         });
+    };
+
+    const loadTelegramInfo = async () => {
+        if (!session) return;
+        try {
+            const { data, error } = await supabase
+                .from('qt_telegram_chats')
+                .select('telegram_chat_id, alarm_time')
+                .eq('user_id', session.user.id)
+                .maybeSingle();
+            if (!error && data) {
+                setTelegramChatId(data.telegram_chat_id || '');
+                setTelegramAlarmTime(data.alarm_time || '08:00');
+                setTelegramEnabled(true);
+            } else {
+                setTelegramEnabled(false);
+            }
+        } catch (e) {
+            console.error('텔레그램 설정 로드 실패:', e);
+        }
     };
 
     const loadRefls = async () => {
@@ -438,57 +463,228 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
         }
     };
 
+    const checkPushSubscriptionStatus = async () => {
+        if (!('serviceWorker' in navigator)) return;
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            const sub = await reg.pushManager.getSubscription();
+            if (sub) {
+                setAlarmEnabled(true);
+                localStorage.setItem('sba_qt_alarm_enabled', 'true');
+                if (session) {
+                    const { data, error } = await supabase
+                        .from('qt_push_subscriptions')
+                        .select('alarm_time')
+                        .eq('endpoint', sub.endpoint)
+                        .maybeSingle();
+                    if (!error && data) {
+                        setAlarmTime(data.alarm_time);
+                        localStorage.setItem('sba_qt_alarm_time', data.alarm_time);
+                    }
+                }
+            } else {
+                setAlarmEnabled(false);
+                localStorage.setItem('sba_qt_alarm_enabled', 'false');
+            }
+        } catch (e) {
+            console.error('푸시 상태 감지 실패:', e);
+        }
+    };
+
     useEffect(() => {
         if (isOpen) {
             loadRefls();
             loadStats();
+            if (session) {
+                loadTelegramInfo();
+                checkPushSubscriptionStatus();
+            }
         }
     }, [isOpen, session]);
 
-    if (!isOpen) return null;
-
     const handleAlarmToggle = async (e) => {
         const checked = e.target.checked;
+        if (!('serviceWorker' in navigator)) {
+            alert('이 브라우저는 웹 알림 기능을 지원하지 않습니다.');
+            return;
+        }
+
         if (checked) {
-            if (!('Notification' in window)) {
-                alert('이 브라우저는 알림 기능을 지원하지 않습니다.');
-                return;
-            }
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') {
-                alert('알림 권한이 거부되었습니다. 브라우저 설정에서 알림 권한을 허용해 주세요.');
-                return;
-            }
-        }
-        
-        setAlarmEnabled(checked);
-        localStorage.setItem('sba_qt_alarm_enabled', checked ? 'true' : 'false');
-        
-        if (session) {
-            await supabase.auth.updateUser({
-                data: {
-                    sba_qt_alarm_enabled: checked,
-                    sba_qt_alarm_time: alarmTime
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    alert('알림 권한이 거부되었습니다. 브라우저 설정에서 알림 권한을 허용해 주세요.');
+                    return;
                 }
-            });
+
+                const reg = await navigator.serviceWorker.ready;
+                const publicVapidKey = 'BBRULQ6u9snBnV2LAfyu410fLl9Hhcc9VyE70wkgeEdeYjYCewDSPJ_t19oK_AzVtLDVBUYNc8YjuVb-B5sx8TQ';
+                const subscription = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+                });
+
+                const subJson = subscription.toJSON();
+                const p256dh = subJson.keys?.p256dh || '';
+                const auth = subJson.keys?.auth || '';
+
+                const { error } = await supabase
+                    .from('qt_push_subscriptions')
+                    .upsert({
+                        user_id: session ? session.user.id : null,
+                        endpoint: subscription.endpoint,
+                        p256dh: p256dh,
+                        auth: auth,
+                        alarm_time: alarmTime,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'endpoint' });
+
+                if (error) throw error;
+
+                setAlarmEnabled(true);
+                localStorage.setItem('sba_qt_alarm_enabled', 'true');
+                addToast('브라우저 푸시 알림이 활성화되었습니다.');
+            } catch (err) {
+                console.error('푸시 구독 실패:', err);
+                alert('푸시 알림 활성화 도중 오류가 발생했습니다: ' + err.message);
+            }
+        } else {
+            try {
+                const reg = await navigator.serviceWorker.ready;
+                const sub = await reg.pushManager.getSubscription();
+                if (sub) {
+                    await sub.unsubscribe();
+                    await supabase
+                        .from('qt_push_subscriptions')
+                        .delete()
+                        .eq('endpoint', sub.endpoint);
+                }
+                setAlarmEnabled(false);
+                localStorage.setItem('sba_qt_alarm_enabled', 'false');
+                addToast('브라우저 푸시 알림이 비활성화되었습니다.');
+            } catch (err) {
+                console.error('푸시 해제 실패:', err);
+            }
         }
-        addToast(checked ? '매일 QT 알림이 켜졌습니다.' : '매일 QT 알림이 꺼졌습니다.');
     };
 
     const handleAlarmTimeChange = async (h, m) => {
         const newTime = `${h}:${m}`;
         setAlarmTime(newTime);
         localStorage.setItem('sba_qt_alarm_time', newTime);
-        
-        if (session) {
-            await supabase.auth.updateUser({
-                data: {
-                    sba_qt_alarm_enabled: alarmEnabled,
-                    sba_qt_alarm_time: newTime
+
+        if ('serviceWorker' in navigator) {
+            try {
+                const reg = await navigator.serviceWorker.ready;
+                const sub = await reg.pushManager.getSubscription();
+                if (sub) {
+                    const { error } = await supabase
+                        .from('qt_push_subscriptions')
+                        .update({ alarm_time: newTime })
+                        .eq('endpoint', sub.endpoint);
+                    if (error) throw error;
                 }
-            });
+            } catch (e) {
+                console.error('알림 시간 클라우드 동기화 실패:', e);
+            }
         }
-        addToast(`알림 시간이 ${h}시 ${m}분으로 변경되었습니다.`);
+        addToast(`브라우저 알림 시간이 ${h}시 ${m}분으로 변경되었습니다.`);
+    };
+
+    const handleTelegramToggle = async (e) => {
+        const checked = e.target.checked;
+        if (!checked) {
+            if (window.confirm('텔레그램 말씀 알림 연동을 완전히 해제하시겠습니까?')) {
+                try {
+                    const { error } = await supabase
+                        .from('qt_telegram_chats')
+                        .delete()
+                        .eq('user_id', session.user.id);
+                    if (error) throw error;
+                    setTelegramChatId('');
+                    setTelegramEnabled(false);
+                    addToast('텔레그램 알림 연동이 해제되었습니다.');
+                } catch (err) {
+                    alert('텔레그램 연동 해제 실패: ' + err.message);
+                }
+            }
+        } else {
+            setTelegramEnabled(true);
+        }
+    };
+
+    const handleSaveTelegram = async () => {
+        if (!telegramChatId.trim()) {
+            alert('올바른 텔레그램 Chat ID를 입력해 주세요.');
+            return;
+        }
+        try {
+            const { error } = await supabase
+                .from('qt_telegram_chats')
+                .upsert({
+                    user_id: session.user.id,
+                    telegram_chat_id: telegramChatId.trim(),
+                    alarm_time: telegramAlarmTime,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'user_id' });
+            if (error) throw error;
+            addToast('텔레그램 알림 설정이 저장되었습니다.');
+        } catch (err) {
+            alert('텔레그램 설정 저장 실패: ' + err.message);
+        }
+    };
+
+    const handleTelegramTimeChange = async (h, m) => {
+        const newTime = `${h}:${m}`;
+        setTelegramAlarmTime(newTime);
+        if (telegramChatId.trim() && session) {
+            try {
+                const { error } = await supabase
+                    .from('qt_telegram_chats')
+                    .update({ alarm_time: newTime })
+                    .eq('user_id', session.user.id);
+                if (error) throw error;
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        addToast(`텔레그램 알림 시간이 ${h}시 ${m}분으로 변경되었습니다.`);
+    };
+
+    const handleTestNotification = async () => {
+        setIsTesting(true);
+        try {
+            const reg = ('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null;
+            const sub = reg ? await reg.pushManager.getSubscription() : null;
+            
+            const reqBody = {
+                user_id: session ? session.user.id : null,
+                endpoint: sub ? sub.endpoint : null,
+                telegram_chat_id: telegramChatId.trim() || null,
+                test: true
+            };
+
+            const res = await fetch('https://ebfpjvwwbognddixrvyc.supabase.co/functions/v1/send-daily-push', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token || ''}`
+                },
+                body: JSON.stringify(reqBody)
+            });
+
+            if (res.ok) {
+                addToast('테스트 알림 요청이 전송되었습니다. 잠시 후 기기를 확인해 주세요.');
+            } else {
+                const errText = await res.text();
+                throw new Error(errText || 'Edge Function 응답 실패');
+            }
+        } catch (err) {
+            console.error('테스트 알림 오류:', err);
+            alert('테스트 알림 전송에 실패했습니다: ' + err.message);
+        } finally {
+            setIsTesting(false);
+        }
     };
 
     const handleSync = async () => {
@@ -599,69 +795,201 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
                 {/* 매일 말씀 알림 설정 */}
                 <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
                     <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
-                        <b>매일 QT 알림 설정 (Notification)</b>
+                        <b>매일 말씀 알림 설정</b>
                     </p>
+                    
+                    {/* 1. 브라우저 푸시 알림 */}
+                    <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--sba-border)' }}>
+                        <SettingRow style={{ borderBottom: 'none', padding: '0 0 8px 0', margin: 0 }}>
+                            <SettingLabel style={{ fontSize: '0.85rem' }}>브라우저 알림 수신</SettingLabel>
+                            <SettingControl>
+                                <SwitchContainer>
+                                    <SwitchInput 
+                                        type="checkbox" 
+                                        checked={alarmEnabled} 
+                                        onChange={handleAlarmToggle} 
+                                    />
+                                    <SwitchSlider />
+                                </SwitchContainer>
+                            </SettingControl>
+                        </SettingRow>
+                        {alarmEnabled && (
+                            <SettingRow style={{ borderBottom: 'none', padding: '8px 0 0 0', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <SettingLabel style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--sba-text-secondary)' }}>알림 시간</SettingLabel>
+                                <SettingControl style={{ gap: '6px' }}>
+                                    <select 
+                                        value={alarmHour} 
+                                        onChange={(e) => handleAlarmTimeChange(e.target.value, alarmMinute)}
+                                        style={{
+                                            padding: '4px 8px',
+                                            borderRadius: '6px',
+                                            border: '1px solid var(--sba-border-strong)',
+                                            background: 'var(--sba-card-bg)',
+                                            color: 'var(--sba-text)',
+                                            fontSize: '0.8rem'
+                                        }}
+                                    >
+                                        {Array.from({ length: 24 }).map((_, i) => {
+                                            const h = String(i).padStart(2, '0');
+                                            return <option key={h} value={h}>{h}시</option>;
+                                        })}
+                                    </select>
+                                    <select 
+                                        value={alarmMinute} 
+                                        onChange={(e) => handleAlarmTimeChange(alarmHour, e.target.value)}
+                                        style={{
+                                            padding: '4px 8px',
+                                            borderRadius: '6px',
+                                            border: '1px solid var(--sba-border-strong)',
+                                            background: 'var(--sba-card-bg)',
+                                            color: 'var(--sba-text)',
+                                            fontSize: '0.8rem'
+                                        }}
+                                    >
+                                        {Array.from({ length: 12 }).map((_, i) => {
+                                            const m = String(i * 5).padStart(2, '0');
+                                            return <option key={m} value={m}>{m}분</option>;
+                                        })}
+                                    </select>
+                                </SettingControl>
+                            </SettingRow>
+                        )}
+                        <p style={{ fontSize: '0.7rem', color: 'var(--sba-text-muted)', margin: '6px 0 0 0', lineHeight: '1.4' }}>
+                            ※ 화면이 꺼져도 수신됩니다. iOS는 '홈 화면에 추가(PWA)'한 경우에만 수신 가능합니다.
+                        </p>
+                    </div>
+
+                    {/* 2. 텔레그램 말씀 봇 알림 */}
                     {!session ? (
                         <div style={{ fontSize: '0.8rem', color: 'var(--sba-text-muted)', textAlign: 'center', padding: '8px 0' }}>
-                            로그인 후 알림 설정을 사용할 수 있습니다.
+                            소셜 로그인하시면 안정적인 텔레그램 말씀 배달 연동을 지원합니다.
                         </div>
                     ) : (
-                        <>
-                            <SettingRow style={{ borderBottom: 'none', padding: '8px 0' }}>
-                                <SettingLabel>알림 받기</SettingLabel>
+                        <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--sba-border)' }}>
+                            <SettingRow style={{ borderBottom: 'none', padding: '0 0 8px 0', margin: 0 }}>
+                                <SettingLabel style={{ fontSize: '0.85rem' }}>텔레그램 알림 수신</SettingLabel>
                                 <SettingControl>
                                     <SwitchContainer>
                                         <SwitchInput 
                                             type="checkbox" 
-                                            checked={alarmEnabled} 
-                                            onChange={handleAlarmToggle} 
+                                            checked={telegramEnabled} 
+                                            onChange={handleTelegramToggle} 
                                         />
                                         <SwitchSlider />
                                     </SwitchContainer>
                                 </SettingControl>
                             </SettingRow>
-                            {alarmEnabled && (
-                                <SettingRow style={{ borderBottom: 'none', padding: '8px 0' }}>
-                                    <SettingLabel>알림 시간</SettingLabel>
-                                    <SettingControl style={{ gap: '6px' }}>
-                                        <select 
-                                            value={alarmHour} 
-                                            onChange={(e) => handleAlarmTimeChange(e.target.value, alarmMinute)}
-                                            style={{
-                                                padding: '4px 8px',
-                                                borderRadius: '6px',
-                                                border: '1px solid var(--sba-border-strong)',
-                                                background: 'var(--sba-card-bg)',
-                                                color: 'var(--sba-text)',
-                                                fontSize: '0.85rem'
-                                            }}
-                                        >
-                                            {Array.from({ length: 24 }).map((_, i) => {
-                                                const h = String(i).padStart(2, '0');
-                                                return <option key={h} value={h}>{h}시</option>;
-                                            })}
-                                        </select>
-                                        <select 
-                                            value={alarmMinute} 
-                                            onChange={(e) => handleAlarmTimeChange(alarmHour, e.target.value)}
-                                            style={{
-                                                padding: '4px 8px',
-                                                borderRadius: '6px',
-                                                border: '1px solid var(--sba-border-strong)',
-                                                background: 'var(--sba-card-bg)',
-                                                color: 'var(--sba-text)',
-                                                fontSize: '0.85rem'
-                                            }}
-                                        >
-                                            {Array.from({ length: 12 }).map((_, i) => {
-                                                const m = String(i * 5).padStart(2, '0');
-                                                return <option key={m} value={m}>{m}분</option>;
-                                            })}
-                                        </select>
-                                    </SettingControl>
-                                </SettingRow>
+                            {telegramEnabled && (
+                                <>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--sba-text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <span>1. <a href="https://t.me/SbaQtAlarmBot" target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', color: 'var(--sba-text)', fontWeight: 'bold' }}>@SbaQtAlarmBot</a> 링크를 눌러 대화를 시작하세요.</span>
+                                            <span>2. 봇 채팅창에 <code>/myid</code>를 입력하여 받은 숫자를 아래에 넣고 저장하세요.</span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                                            <input 
+                                                type="text" 
+                                                placeholder="텔레그램 Chat ID 입력" 
+                                                value={telegramChatId} 
+                                                onChange={e => setTelegramChatId(e.target.value)}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '6px 8px',
+                                                    fontSize: '0.8rem',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid var(--sba-border-strong)',
+                                                    background: 'var(--sba-card-bg)',
+                                                    color: 'var(--sba-text)'
+                                                }}
+                                            />
+                                            <button 
+                                                onClick={handleSaveTelegram}
+                                                style={{
+                                                    padding: '6px 12px',
+                                                    fontSize: '0.8rem',
+                                                    background: 'var(--sba-text)',
+                                                    color: 'var(--sba-bg)',
+                                                    border: 'none',
+                                                    borderRadius: '6px',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600'
+                                                }}
+                                            >
+                                                저장
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <SettingRow style={{ borderBottom: 'none', padding: '10px 0 0 0', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <SettingLabel style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--sba-text-secondary)' }}>알림 시간</SettingLabel>
+                                        <SettingControl style={{ gap: '6px' }}>
+                                            <select 
+                                                value={tgHour} 
+                                                onChange={(e) => handleTelegramTimeChange(e.target.value, tgMinute)}
+                                                style={{
+                                                    padding: '4px 8px',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid var(--sba-border-strong)',
+                                                    background: 'var(--sba-card-bg)',
+                                                    color: 'var(--sba-text)',
+                                                    fontSize: '0.8rem'
+                                                }}
+                                            >
+                                                {Array.from({ length: 24 }).map((_, i) => {
+                                                    const h = String(i).padStart(2, '0');
+                                                    return <option key={h} value={h}>{h}시</option>;
+                                                })}
+                                            </select>
+                                            <select 
+                                                value={tgMinute} 
+                                                onChange={(e) => handleTelegramTimeChange(tgHour, e.target.value)}
+                                                style={{
+                                                    padding: '4px 8px',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid var(--sba-border-strong)',
+                                                    background: 'var(--sba-card-bg)',
+                                                    color: 'var(--sba-text)',
+                                                    fontSize: '0.8rem'
+                                                }}
+                                            >
+                                                {Array.from({ length: 12 }).map((_, i) => {
+                                                    const m = String(i * 5).padStart(2, '0');
+                                                    return <option key={m} value={m}>{m}분</option>;
+                                                })}
+                                            </select>
+                                        </SettingControl>
+                                    </SettingRow>
+                                </>
                             )}
-                        </>
+                        </div>
+                    )}
+
+                    {/* 알림 즉시 테스트 버튼 */}
+                    {(alarmEnabled || (session && telegramChatId)) && (
+                        <button 
+                            onClick={handleTestNotification}
+                            disabled={isTesting}
+                            style={{
+                                width: '100%',
+                                padding: '10px',
+                                fontSize: '0.85rem',
+                                border: '1px solid var(--sba-border-strong)',
+                                borderRadius: '8px',
+                                background: 'transparent',
+                                color: 'var(--sba-text)',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                transition: 'background-color 0.2s',
+                                marginTop: '4px'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--sba-card-sub-bg)'}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                            {isTesting ? '테스트 발송 중...' : '알림 즉시 테스트하기'}
+                        </button>
                     )}
                 </div>
 

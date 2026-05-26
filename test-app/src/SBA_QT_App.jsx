@@ -206,6 +206,13 @@ export default function SBA_QT_App() {
         // 첫 진입 시 히스토리 초기화
         window.history.replaceState({ tab: activeTab }, '');
 
+        // 서비스 워커 등록
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(reg => console.log('Service Worker 등록 성공:', reg.scope))
+                .catch(err => console.error('Service Worker 등록 실패:', err));
+        }
+
         // 스플래시 애니메이션 타이머
         const fadeTimer = setTimeout(() => setIsSplashFading(true), 2200);
         const removeTimer = setTimeout(() => setIsSplashVisible(false), 3000);
