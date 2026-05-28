@@ -16,9 +16,8 @@ app.use(express.json()); // JSON 바디 파서 필수 추가
 // React 빌드 결과물(test-app/dist) 정적 파일 서빙
 app.use(express.static(path.join(__dirname, 'test-app/dist')));
 
-// 환경 변수 설정
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://ebfpjvwwbognddixrvyc.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://ebfpjvwwbognddixrvyc.supabase.co';
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
 const memoryDB = {
   churches: [],
