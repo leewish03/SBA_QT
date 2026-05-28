@@ -43,8 +43,11 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // VAPID 키 세팅
-    const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY') || 'BBRULQ6u9snBnV2LAfyu410fLl9Hhcc9VyE70wkgeEdeYjYCewDSPJ_t19oK_AzVtLDVBUYNc8YjuVb-B5sx8TQ';
-    const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY') || 'Kaa2Bi6wQeDqBFLRj3mpRymJSojLYp7VCkjAIY8CFO4';
+    const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
+    const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY');
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      throw new Error("VAPID_PUBLIC_KEY 또는 VAPID_PRIVATE_KEY 환경변수가 설정되지 않았습니다.");
+    }
     webpush.setVapidDetails('mailto:lekas1217@gmail.com', vapidPublicKey, vapidPrivateKey);
 
     // 요청 페이로드 분석
