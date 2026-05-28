@@ -17,7 +17,9 @@ app.use(express.json()); // JSON 바디 파서 필수 추가
 app.use(express.static(path.join(__dirname, 'test-app/dist')));
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://ebfpjvwwbognddixrvyc.supabase.co';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+
+console.log(`[Supabase Config] URL: ${supabaseUrl ? 'OK' : 'MISSING'}, Key: ${supabaseAnonKey ? `OK (${supabaseAnonKey.substring(0, 10)}...)` : 'MISSING'}`);
 
 const memoryDB = {
   churches: [],
