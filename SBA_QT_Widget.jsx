@@ -1690,6 +1690,77 @@ function AppFooter() {
 
 
 // ==========================================
+// 0. 말씀 뷰어 관련 styled-components
+// ==========================================
+const VerseTitle = styled.h2`
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--sba-verse-title);
+  margin-bottom: 24px;
+  margin-top: 10px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--sba-border-strong);
+  text-align: left;
+`;
+
+const VerseContainer = styled.div`
+  font-family: 'Noto Serif KR', serif;
+`;
+
+const VerseBlock = styled.div`
+  margin-bottom: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  line-height: 1.9;
+  letter-spacing: -0.02em;
+  font-family: 'Noto Serif KR', serif;
+  color: var(--sba-verse-text);
+  font-size: var(--sba-bible-font-size, 1.1rem);
+  text-align: left; 
+  word-break: break-all;
+  display: flex;
+  align-items: flex-start;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+
+  &:hover {
+    background-color: var(--sba-card-active);
+  }
+  
+  &.highlighted {
+    background-color: var(--sba-highlight);
+    &:hover {
+      background-color: var(--sba-highlight-hover);
+    }
+  }
+  
+  &.focused {
+    background-color: var(--sba-card-active);
+    &.highlighted {
+      background-color: var(--sba-highlight-hover);
+    }
+  }
+`;
+
+const VerseNumber = styled.div`
+  font-weight: 700;
+  color: var(--sba-verse-num);
+  font-size: 0.75em;
+  margin-right: 8px;
+  margin-top: 0.35em;
+  min-width: 1.2em;
+  text-align: right;
+  user-select: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+`;
+
+const VerseText = styled.div`
+  flex: 1;
+`;
+
+// ==========================================
 // 1. 메모(QT 노트) 에디터 컴포넌트 스타일 및 컴포넌트
 // ==========================================
 const DrawerOverlay = styled.div`
@@ -2284,26 +2355,26 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
 
   return (
     <>
-      <h2 className="sba-verse-title">{fullName} {chapter}장</h2>
-      <div className="serif-text sba-verse-container">
+      <VerseTitle>{fullName} {chapter}장</VerseTitle>
+      <VerseContainer className="serif-text">
         {Object.entries(verses).map(([vNum, text]) => {
           const bookmarked = isBookmarked(vNum);
           const isFocused = !!selectedVerses[vNum];
           const elementId = `verse-${book}-${chapter}-${vNum}`;
 
           return (
-            <div 
+            <VerseBlock 
               id={elementId}
               key={vNum}
-              className={`sba-verse-block ${bookmarked ? 'highlighted' : ''} ${isFocused ? 'focused' : ''}`}
+              className={`${bookmarked ? 'highlighted' : ''} ${isFocused ? 'focused' : ''}`}
               onClick={() => handleVerseClick(vNum, text)}
             >
-              <div className="sba-verse-number">{vNum}</div>
-              <div className="sba-verse-text">{text}</div>
-            </div>
+              <VerseNumber>{vNum}</VerseNumber>
+              <VerseText>{text}</VerseText>
+            </VerseBlock>
           );
         })}
-      </div>
+      </VerseContainer>
 
       {selectedCount > 0 && (
         <FloatingBar className="sba-floating-bar">
@@ -3431,7 +3502,7 @@ const SharingCard = styled.div`
   margin-bottom: 20px;
 `;
 
-function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
+function SharingTab({ session, onOpenAuthModal, addToast, isDark, userChurch }) {
   const [reflections, setReflections] = useState([]);
   const [comments, setComments] = useState({}); // { reflectionId: [] }
   const [likes, setLikes] = useState({}); // { reflectionId: { count: 0, liked: false } }
@@ -3443,7 +3514,7 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const [newCommentText, setNewCommentText] = useState({}); // { reflectionId: '' }
   const [isBookmarkSelectOpen, setIsBookmarkSelectOpen] = useState(false);
 
-  const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
+  const isAdmin = userChurch?.role === 'admin' || session?.user?.email === 'lekas1217@gmail.com';
 
   const getTodayDateStr = () => {
     return safeToISODateString(getEffectiveDate());
@@ -3452,11 +3523,13 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const todayStr = getTodayDateStr();
 
   const loadReflections = async () => {
+    if (!userChurch) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('qt_shared_reflections')
         .select('*')
+        .eq('church_id', userChurch.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -3513,7 +3586,7 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
 
   useEffect(() => {
     loadReflections();
-  }, [session]);
+  }, [session, userChurch]);
 
   const handleImportMemo = () => {
     if (!session) {
@@ -3555,6 +3628,10 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
       onOpenAuthModal();
       return;
     }
+    if (!userChurch) {
+      addToast('소속된 교회가 없습니다.');
+      return;
+    }
     if (!content.trim()) {
       alert('묵상 내용을 입력해 주세요.');
       return;
@@ -3571,6 +3648,7 @@ function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
         .from('qt_shared_reflections')
         .insert({
           user_id: session.user.id,
+          church_id: userChurch.id,
           author_name: authorName,
           author_email: session.user.email,
           target_date: todayStr,
@@ -4031,7 +4109,7 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
   };
 
   return (
-    <div className="sba-modal-overlay" onClick={onClose} style={{ zIndex: 130 }}>
+    <DetailModalOverlay onClick={onClose} style={{ zIndex: 130 }}>
       {/* SVG 노이즈 필터 정의 */}
       <svg style={{ display: 'none' }}>
         <filter id="card-paper-noise">
@@ -4042,7 +4120,7 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
         </filter>
       </svg>
 
-      <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '420px', padding: '20px'}}>
+      <DetailModalContent onClick={e => e.stopPropagation()} style={{maxWidth: '420px', padding: '20px'}}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h3 style={{marginTop: 0, marginBottom: 0, fontSize: '1rem', fontWeight: 'bold'}}>말씀 카드 제작</h3>
           <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--sba-text-muted)' }} onClick={onClose}>✕</button>
@@ -4187,17 +4265,17 @@ function ImageCardModal({ isOpen, onClose, passage, verses }) {
 
         {/* 하단 버튼 */}
         <div style={{display: 'flex', gap: '8px', marginTop: '20px'}}>
-          <button className="sba-btn" style={{flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleShare}>
+          <SolidButton style={{flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleShare}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             공유
-          </button>
-          <button className="sba-btn" style={{flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'var(--sba-card-sub-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border-strong)'}} onClick={handleDownload}>
+          </SolidButton>
+          <OutlinedButton style={{flex: 1, padding: '10px 16px', fontSize: '0.875rem', marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'var(--sba-card-sub-bg)'}} onClick={handleDownload}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             저장
-          </button>
+          </OutlinedButton>
         </div>
-      </div>
-    </div>
+      </DetailModalContent>
+    </DetailModalOverlay>
   );
 }
 
@@ -4220,7 +4298,7 @@ const ModalOverlay = styled.div`
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background-color: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
   z-index: 100;
   display: flex;
   align-items: center;
@@ -4505,44 +4583,40 @@ const SettingControl = styled.div`
 
 const SwitchContainer = styled.label`
   position: relative;
-  display: inline-block;
-  width: 48px;
+  display: inline-flex;
+  align-items: center;
+  width: 44px;
   height: 24px;
+  cursor: pointer;
+  user-select: none;
 `;
 
 const SwitchInput = styled.input`
   opacity: 0;
   width: 0;
   height: 0;
-  
-  &:checked + span {
-    background-color: var(--sba-text);
-  }
-  
-  &:checked + span:before {
-    transform: translateX(24px);
-    background-color: var(--sba-bg);
-  }
 `;
 
 const SwitchSlider = styled.span`
   position: absolute;
-  cursor: pointer;
   top: 0; left: 0; right: 0; bottom: 0;
-  background-color: var(--sba-border-strong);
-  transition: .2s;
-  border-radius: 24px;
+  background-color: ${props => props.$checked ? 'var(--sba-text)' : 'var(--sba-border-strong)'};
+  border: 1px solid ${props => props.$checked ? 'var(--sba-text)' : 'var(--sba-border-strong)'};
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  border-radius: 9999px;
   
   &:before {
     position: absolute;
     content: "";
     height: 18px;
     width: 18px;
-    left: 3px;
-    bottom: 3px;
-    background-color: var(--sba-text);
-    transition: .2s;
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--sba-bg);
     border-radius: 50%;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: ${props => props.$checked ? 'translateX(20px)' : 'translateX(0)'};
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 `;
 
@@ -4568,10 +4642,9 @@ const FontSizeVal = styled.span`
   text-align: center;
 `;
 
-function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setStartDateStr, addToast, session }) {
-    const [token, setToken] = useState('sba_qt_admin_secret_token');
+function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, session, userChurch, setUserChurch, scheduleData, loadSchedule }) {
+    const [activeSubTab, setActiveSubTab] = useState('settings'); // 'settings' | 'admin_generate' | 'admin_edit'
     const [syncing, setSyncing] = useState(false);
-    const [refls, setRefls] = useState([]);
     const [stats, setStats] = useState({ bookmarks: 0, notes: 0 });
     const [fontSize, setFontSize] = useState(() => {
         const saved = localStorage.getItem('sba_bible_font_size');
@@ -4585,15 +4658,30 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
     const [alarmTime, setAlarmTime] = useState(() => {
         return localStorage.getItem('sba_qt_alarm_time') || '08:00';
     });
-
-    // 텔레그램 연동 상태 정의
-    const [telegramChatId, setTelegramChatId] = useState('');
-    const [telegramAlarmTime, setTelegramAlarmTime] = useState('08:00');
-    const [telegramEnabled, setTelegramEnabled] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
 
     const [alarmHour, alarmMinute] = alarmTime.split(':');
-    const [tgHour, tgMinute] = telegramAlarmTime.split(':');
+
+    // 1. 일정 자동 생성용 상태
+    const [genStartDate, setGenStartDate] = useState(safeToISODateString(getEffectiveDate()));
+    const [genStartBook, setGenStartBook] = useState('GEN');
+    const [genStartChap, setGenStartChap] = useState(1);
+    const [genEndBook, setGenEndBook] = useState('REV');
+    const [genEndChap, setGenEndChap] = useState(22);
+    const [genPagesPerDay, setGenPagesPerDay] = useState(1);
+    const [genExcludeDays, setGenExcludeDays] = useState([0]); // 기본 일요일 제외
+
+    // 2. 일정 수동 수정용 상태
+    const [editDate, setEditDate] = useState(safeToISODateString(getEffectiveDate()));
+    const [editQtBook, setEditQtBook] = useState('');
+    const [editQtStartChap, setEditQtStartChap] = useState(1);
+    const [editQtStartVerse, setEditQtStartVerse] = useState(1);
+    const [editQtEndChap, setEditQtEndChap] = useState(1);
+    const [editQtEndVerse, setEditQtEndVerse] = useState(30);
+    const [editQtTitle, setEditQtTitle] = useState('');
+    const [editReadingBook, setEditReadingBook] = useState('');
+    const [editReadingStartChap, setEditReadingStartChap] = useState(1);
+    const [editReadingEndChap, setEditReadingEndChap] = useState(1);
 
     const urlBase64ToUint8Array = (base64String) => {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -4608,7 +4696,7 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
         return outputArray;
     };
 
-    const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
+    const isAdmin = userChurch?.role === 'admin';
 
     const changeFontSize = (delta) => {
         setFontSize(prev => {
@@ -4617,42 +4705,6 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
             document.documentElement.style.setProperty('--sba-bible-font-size', `${next.toFixed(1)}px`);
             return next;
         });
-    };
-
-    const loadTelegramInfo = async () => {
-        if (!session) return;
-        try {
-            const { data, error } = await supabase
-                .from('qt_telegram_chats')
-                .select('telegram_chat_id, alarm_time')
-                .eq('user_id', session.user.id)
-                .maybeSingle();
-            if (!error && data) {
-                setTelegramChatId(data.telegram_chat_id || '');
-                setTelegramAlarmTime(data.alarm_time || '08:00');
-                setTelegramEnabled(true);
-            } else {
-                setTelegramEnabled(false);
-            }
-        } catch (e) {
-            console.error('텔레그램 설정 로드 실패:', e);
-        }
-    };
-
-    const loadRefls = async () => {
-        if (!isAdmin) return;
-        try {
-            const { data, error } = await supabase
-                .from('qt_shared_reflections')
-                .select('id, author_name, passage, created_at')
-                .order('created_at', { ascending: false })
-                .limit(20);
-            if (!error && data) {
-                setRefls(data);
-            }
-        } catch (e) {
-            console.error(e);
-        }
     };
 
     const loadStats = () => {
@@ -4698,14 +4750,41 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
 
     useEffect(() => {
         if (isOpen) {
-            loadRefls();
             loadStats();
+            setActiveSubTab('settings');
             if (session) {
-                loadTelegramInfo();
                 checkPushSubscriptionStatus();
             }
         }
     }, [isOpen, session]);
+
+    // 날짜 변경 시 해당 날짜의 일정을 찾아서 수동 폼 채우기
+    useEffect(() => {
+        if (scheduleData && editDate) {
+            const row = scheduleData.find(s => s.date === editDate);
+            if (row) {
+                setEditQtBook(row.qt_book || '');
+                setEditQtStartChap(row.qt_start_chap || 1);
+                setEditQtStartVerse(row.qt_start_verse || 1);
+                setEditQtEndChap(row.qt_end_chap || 1);
+                setEditQtEndVerse(row.qt_end_verse || 30);
+                setEditQtTitle(row.qt_title || '');
+                setEditReadingBook(row.reading_book || '');
+                setEditReadingStartChap(row.reading_start_chap || 1);
+                setEditReadingEndChap(row.reading_end_chap || 1);
+            } else {
+                setEditQtBook('');
+                setEditQtStartChap(1);
+                setEditQtStartVerse(1);
+                setEditQtEndChap(1);
+                setEditQtEndVerse(30);
+                setEditQtTitle('');
+                setEditReadingBook('');
+                setEditReadingStartChap(1);
+                setEditReadingEndChap(1);
+            }
+        }
+    }, [editDate, scheduleData]);
 
     const handleAlarmToggle = async (e) => {
         const checked = e.target.checked;
@@ -4741,6 +4820,7 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
                         p256dh: p256dh,
                         auth: auth,
                         alarm_time: alarmTime,
+                        church_id: userChurch?.id,
                         updated_at: new Date().toISOString()
                     }, { onConflict: 'endpoint' });
 
@@ -4796,76 +4876,19 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
         addToast(`브라우저 알림 시간이 ${h}시 ${m}분으로 변경되었습니다.`);
     };
 
-    const handleTelegramToggle = async (e) => {
-        const checked = e.target.checked;
-        if (!checked) {
-            if (window.confirm('텔레그램 말씀 알림 연동을 완전히 해제하시겠습니까?')) {
-                try {
-                    const { error } = await supabase
-                        .from('qt_telegram_chats')
-                        .delete()
-                        .eq('user_id', session.user.id);
-                    if (error) throw error;
-                    setTelegramChatId('');
-                    setTelegramEnabled(false);
-                    addToast('텔레그램 알림 연동이 해제되었습니다.');
-                } catch (err) {
-                    alert('텔레그램 연동 해제 실패: ' + err.message);
-                }
-            }
-        } else {
-            setTelegramEnabled(true);
-        }
-    };
-
-    const handleSaveTelegram = async () => {
-        if (!telegramChatId.trim()) {
-            alert('올바른 텔레그램 Chat ID를 입력해 주세요.');
-            return;
-        }
-        try {
-            const { error } = await supabase
-                .from('qt_telegram_chats')
-                .upsert({
-                    user_id: session.user.id,
-                    telegram_chat_id: telegramChatId.trim(),
-                    alarm_time: telegramAlarmTime,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'user_id' });
-            if (error) throw error;
-            addToast('텔레그램 알림 설정이 저장되었습니다.');
-        } catch (err) {
-            alert('텔레그램 설정 저장 실패: ' + err.message);
-        }
-    };
-
-    const handleTelegramTimeChange = async (h, m) => {
-        const newTime = `${h}:${m}`;
-        setTelegramAlarmTime(newTime);
-        if (telegramChatId.trim() && session) {
-            try {
-                const { error } = await supabase
-                    .from('qt_telegram_chats')
-                    .update({ alarm_time: newTime })
-                    .eq('user_id', session.user.id);
-                if (error) throw error;
-            } catch (e) {
-                console.error(e);
-            }
-        }
-        addToast(`텔레그램 알림 시간이 ${h}시 ${m}분으로 변경되었습니다.`);
-    };
-
     const handleTestNotification = async () => {
         setIsTesting(true);
         try {
             const reg = ('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null;
             const sub = reg ? await reg.pushManager.getSubscription() : null;
+            if (!sub) {
+                alert('브라우저 알림 수신이 활성화되어 있어야 테스트가 가능합니다.');
+                return;
+            }
             
             const reqBody = {
                 user_id: session ? session.user.id : null,
-                endpoint: sub ? sub.endpoint : null,
-                telegram_chat_id: telegramChatId.trim() || null,
+                endpoint: sub.endpoint,
                 test: true
             };
 
@@ -4892,63 +4915,107 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
         }
     };
 
-    const handleSync = async () => {
-        setSyncing(true);
+    const handleLeaveChurch = async () => {
+        if (!window.confirm(`정말로 '${userChurch?.name}' 교회에서 탈퇴하시겠습니까?`)) return;
         try {
-            const res = await fetch(`/api/sba-qt?purge=true&token=${token}`);
-            if (res.ok) {
-                addToast('구글 스프레드시트 데이터가 즉시 강제 갱신(Purge)되었습니다.');
+            const headers = { 'Content-Type': 'application/json' };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+            const res = await fetch('/api/churches/leave', {
+                method: 'POST',
+                headers
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                addToast('교회에서 탈퇴 처리되었습니다.');
+                setUserChurch(null);
                 onClose();
             } else {
-                let errorMsg = '알 수 없는 오류';
-                const contentType = res.headers.get('content-type') || '';
-                
-                if (contentType.includes('application/json')) {
-                    try {
-                        const errData = await res.json();
-                        errorMsg = errData.error || errData.message || JSON.stringify(errData);
-                    } catch (parseErr) {
-                        console.error('JSON parsing failed:', parseErr);
-                    }
-                } else {
-                    try {
-                        const textData = await res.text();
-                        errorMsg = textData || `상태 코드: ${res.status}`;
-                    } catch (parseErr) {
-                        console.error('Text parsing failed:', parseErr);
-                    }
-                }
-                
-                if (res.status === 401) {
-                    alert(`동기화 실패 (401 Unauthorized): 입력하신 관리자 토큰이 올바르지 않거나 만료되었습니다. 토큰 값을 다시 확인해 주세요.\n(상세 에러: ${errorMsg})`);
-                } else if (res.status === 403) {
-                    alert(`동기화 실패 (403 Forbidden): 이 요청을 수행할 권한이 없습니다.\n(상세 에러: ${errorMsg})`);
-                } else if (res.status === 500) {
-                    alert(`동기화 실패 (500 Internal Server Error): 서버 내부 오류가 발생했습니다. 구글 시트 API 연동을 확인해 주세요.\n(상세 에러: ${errorMsg})`);
-                } else {
-                    alert(`동기화 실패 (상태 코드 ${res.status}): ${errorMsg}`);
-                }
+                throw new Error(data.error || '탈퇴 실패');
             }
-        } catch (e) {
-            console.error(e);
-            alert('API 호출 도중 오류가 발생했습니다. 네트워크 연결 상태를 확인해 주세요.');
+        } catch (err) {
+            alert('교회 탈퇴 중 오류가 발생했습니다: ' + err.message);
+        }
+    };
+
+    // 관리자 일정 자동 생성 요청
+    const handleGenerateSchedule = async () => {
+        if (!window.confirm('기존 일정이 있는 날짜는 덮어씌워집니다. 계속하시겠습니까?')) return;
+        setSyncing(true);
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+            const res = await fetch('/api/qt-schedule/generate', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    church_id: userChurch.id,
+                    start_date: genStartDate,
+                    start_book: genStartBook,
+                    start_chap: genStartChap,
+                    end_book: genEndBook,
+                    end_chap: genEndChap,
+                    pages_per_day: genPagesPerDay,
+                    exclude_days: genExcludeDays
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                addToast(data.message);
+                if (loadSchedule) loadSchedule();
+                setActiveSubTab('settings');
+            } else {
+                throw new Error(data.error || '생성 실패');
+            }
+        } catch (err) {
+            alert('일정 자동 생성 실패: ' + err.message);
         } finally {
             setSyncing(false);
         }
     };
 
-    const handleDeleteRefl = async (id) => {
-        if (!window.confirm('해당 묵상 공유글을 삭제하시겠습니까?')) return;
+    // 관리자 일정 수동 단일 저장 요청
+    const handleUpdateSchedule = async () => {
+        setSyncing(true);
         try {
-            const { error } = await supabase
-                .from('qt_shared_reflections')
-                .delete()
-                .eq('id', id);
-            if (error) throw error;
-            addToast('묵상 공유글이 삭제되었습니다.');
-            loadRefls();
+            const headers = { 'Content-Type': 'application/json' };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+            const existing = scheduleData?.find(s => s.date === editDate);
+            const res = await fetch('/api/qt-schedule/update', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    id: existing?.id || null,
+                    church_id: userChurch.id,
+                    date: editDate,
+                    qt_book: editQtBook || null,
+                    qt_start_chap: editQtStartChap || null,
+                    qt_start_verse: editQtStartVerse || null,
+                    qt_end_chap: editQtEndChap || null,
+                    qt_end_verse: editQtEndVerse || null,
+                    qt_title: editQtTitle || null,
+                    reading_book: editReadingBook || null,
+                    reading_start_chap: editReadingStartChap || null,
+                    reading_end_chap: editReadingEndChap || null
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                addToast('일정이 성공적으로 저장되었습니다.');
+                if (loadSchedule) loadSchedule();
+                setActiveSubTab('settings');
+            } else {
+                throw new Error(data.error || '저장 실패');
+            }
         } catch (err) {
-            alert('삭제 실패: ' + err.message);
+            alert('일정 저장 실패: ' + err.message);
+        } finally {
+            setSyncing(false);
         }
     };
 
@@ -4967,169 +5034,80 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
     return (
         <ModalOverlay onClick={onClose}>
             <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '95%' }}>
-                <ModalHeader>
-                    <ModalTitle>설정 (Settings)</ModalTitle>
-                    <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
-                </ModalHeader>
-                
-                {/* 다크모드 설정 */}
-                <SettingRow>
-                    <SettingLabel>다크 테마 (Dark Mode)</SettingLabel>
-                    <SettingControl>
-                        <SwitchContainer>
-                            <SwitchInput 
-                                type="checkbox" 
-                                checked={isDark} 
-                                onChange={e => setIsDark(e.target.checked)} 
-                            />
-                            <SwitchSlider />
-                        </SwitchContainer>
-                    </SettingControl>
-                </SettingRow>
+                {activeSubTab === 'settings' && (
+                    <>
+                        <ModalHeader>
+                            <ModalTitle>설정 (Settings)</ModalTitle>
+                            <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                        </ModalHeader>
+                        
+                        {/* 소속 교회 정보 */}
+                        {userChurch && (
+                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '16px', border: '1px solid var(--sba-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-secondary)', fontWeight: 'bold' }}>소속 교회</span>
+                                    <span style={{ fontSize: '0.9rem', color: 'var(--sba-text)', fontWeight: '700' }}>
+                                        {userChurch.name} ({userChurch.role === 'admin' ? '관리자' : '지체'})
+                                    </span>
+                                </div>
+                                <ShadButton $variant="outline" onClick={handleLeaveChurch} style={{ flex: 'none', padding: '6px 12px', fontSize: '0.75rem', borderColor: '#ef4444', color: '#ef4444' }}>
+                                    탈퇴하기
+                                </ShadButton>
+                            </div>
+                        )}
 
-                {/* 글자 크기 설정 */}
-                <SettingRow>
-                    <SettingLabel>글자 크기 (Font Size)</SettingLabel>
-                    <SettingControl>
-                        <FontSizeBtn onClick={() => changeFontSize(-1.6)}>A-</FontSizeBtn>
-                        <FontSizeVal>{fontSize.toFixed(1)}px</FontSizeVal>
-                        <FontSizeBtn onClick={() => changeFontSize(1.6)}>A+</FontSizeBtn>
-                    </SettingControl>
-                </SettingRow>
-
-                {/* 매일 말씀 알림 설정 */}
-                <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
-                        <b>매일 말씀 알림 설정</b>
-                    </p>
-                    
-                    {/* 1. 브라우저 푸시 알림 */}
-                    <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--sba-border)' }}>
-                        <SettingRow style={{ borderBottom: 'none', padding: '0 0 8px 0', margin: 0 }}>
-                            <SettingLabel style={{ fontSize: '0.85rem' }}>브라우저 알림 수신</SettingLabel>
+                        {/* 다크모드 설정 */}
+                        <SettingRow>
+                            <SettingLabel>다크 테마 (Dark Mode)</SettingLabel>
                             <SettingControl>
                                 <SwitchContainer>
                                     <SwitchInput 
                                         type="checkbox" 
-                                        checked={alarmEnabled} 
-                                        onChange={handleAlarmToggle} 
+                                        checked={isDark} 
+                                        onChange={e => setIsDark(e.target.checked)} 
                                     />
-                                    <SwitchSlider />
+                                    <SwitchSlider $checked={isDark} />
                                 </SwitchContainer>
                             </SettingControl>
                         </SettingRow>
-                        {alarmEnabled && (
-                            <SettingRow style={{ borderBottom: 'none', padding: '8px 0 0 0', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <SettingLabel style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--sba-text-secondary)' }}>알림 시간</SettingLabel>
-                                <SettingControl style={{ gap: '6px' }}>
-                                    <select 
-                                        value={alarmHour} 
-                                        onChange={(e) => handleAlarmTimeChange(e.target.value, alarmMinute)}
-                                        style={{
-                                            padding: '4px 8px',
-                                            borderRadius: '6px',
-                                            border: '1px solid var(--sba-border-strong)',
-                                            background: 'var(--sba-card-bg)',
-                                            color: 'var(--sba-text)',
-                                            fontSize: '0.8rem'
-                                        }}
-                                    >
-                                        {Array.from({ length: 24 }).map((_, i) => {
-                                            const h = String(i).padStart(2, '0');
-                                            return <option key={h} value={h}>{h}시</option>;
-                                        })}
-                                    </select>
-                                    <select 
-                                        value={alarmMinute} 
-                                        onChange={(e) => handleAlarmTimeChange(alarmHour, e.target.value)}
-                                        style={{
-                                            padding: '4px 8px',
-                                            borderRadius: '6px',
-                                            border: '1px solid var(--sba-border-strong)',
-                                            background: 'var(--sba-card-bg)',
-                                            color: 'var(--sba-text)',
-                                            fontSize: '0.8rem'
-                                        }}
-                                    >
-                                        {Array.from({ length: 12 }).map((_, i) => {
-                                            const m = String(i * 5).padStart(2, '0');
-                                            return <option key={m} value={m}>{m}분</option>;
-                                        })}
-                                    </select>
-                                </SettingControl>
-                            </SettingRow>
-                        )}
-                        <p style={{ fontSize: '0.7rem', color: 'var(--sba-text-muted)', margin: '6px 0 0 0', lineHeight: '1.4' }}>
-                            ※ 화면이 꺼져도 수신됩니다. iOS는 '홈 화면에 추가(PWA)'한 경우에만 수신 가능합니다.
-                        </p>
-                    </div>
 
-                    {/* 2. 텔레그램 말씀 봇 알림 */}
-                    {!session ? (
-                        <div style={{ fontSize: '0.8rem', color: 'var(--sba-text-muted)', textAlign: 'center', padding: '8px 0' }}>
-                            소셜 로그인하시면 안정적인 텔레그램 말씀 배달 연동을 지원합니다.
-                        </div>
-                    ) : (
-                        <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--sba-border)' }}>
-                            <SettingRow style={{ borderBottom: 'none', padding: '0 0 8px 0', margin: 0 }}>
-                                <SettingLabel style={{ fontSize: '0.85rem' }}>텔레그램 알림 수신</SettingLabel>
-                                <SettingControl>
-                                    <SwitchContainer>
-                                        <SwitchInput 
-                                            type="checkbox" 
-                                            checked={telegramEnabled} 
-                                            onChange={handleTelegramToggle} 
-                                        />
-                                        <SwitchSlider />
-                                    </SwitchContainer>
-                                </SettingControl>
-                            </SettingRow>
-                            {telegramEnabled && (
-                                <>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--sba-text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                            <span>1. <a href="https://t.me/SbaQtAlarmBot" target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', color: 'var(--sba-text)', fontWeight: 'bold' }}>@SbaQtAlarmBot</a> 링크를 눌러 대화를 시작하세요.</span>
-                                            <span>2. 봇 채팅창에 <code>/myid</code>를 입력하여 받은 숫자를 아래에 넣고 저장하세요.</span>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                                            <input 
-                                                type="text" 
-                                                placeholder="텔레그램 Chat ID 입력" 
-                                                value={telegramChatId} 
-                                                onChange={e => setTelegramChatId(e.target.value)}
-                                                style={{
-                                                    flex: 1,
-                                                    padding: '6px 8px',
-                                                    fontSize: '0.8rem',
-                                                    borderRadius: '6px',
-                                                    border: '1px solid var(--sba-border-strong)',
-                                                    background: 'var(--sba-card-bg)',
-                                                    color: 'var(--sba-text)'
-                                                }}
+                        {/* 글자 크기 설정 */}
+                        <SettingRow>
+                            <SettingLabel>글자 크기 (Font Size)</SettingLabel>
+                            <SettingControl>
+                                <FontSizeBtn onClick={() => changeFontSize(-1.6)}>A-</FontSizeBtn>
+                                <FontSizeVal>{fontSize.toFixed(1)}px</FontSizeVal>
+                                <FontSizeBtn onClick={() => changeFontSize(1.6)}>A+</FontSizeBtn>
+                            </SettingControl>
+                        </SettingRow>
+
+                        {/* 매일 말씀 알림 설정 */}
+                        <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
+                                <b>매일 말씀 알림 설정</b>
+                            </p>
+                            
+                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--sba-border)' }}>
+                                <SettingRow style={{ borderBottom: 'none', padding: '0 0 8px 0', margin: 0 }}>
+                                    <SettingLabel style={{ fontSize: '0.85rem' }}>브라우저 알림 수신</SettingLabel>
+                                    <SettingControl>
+                                        <SwitchContainer>
+                                            <SwitchInput 
+                                                type="checkbox" 
+                                                checked={alarmEnabled} 
+                                                onChange={handleAlarmToggle} 
                                             />
-                                            <button 
-                                                onClick={handleSaveTelegram}
-                                                style={{
-                                                    padding: '6px 12px',
-                                                    fontSize: '0.8rem',
-                                                    background: 'var(--sba-text)',
-                                                    color: 'var(--sba-bg)',
-                                                    border: 'none',
-                                                    borderRadius: '6px',
-                                                    cursor: 'pointer',
-                                                    fontWeight: '600'
-                                                }}
-                                            >
-                                                저장
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <SettingRow style={{ borderBottom: 'none', padding: '10px 0 0 0', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <SwitchSlider $checked={alarmEnabled} />
+                                        </SwitchContainer>
+                                    </SettingControl>
+                                </SettingRow>
+                                {alarmEnabled && (
+                                    <SettingRow style={{ borderBottom: 'none', padding: '8px 0 0 0', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <SettingLabel style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--sba-text-secondary)' }}>알림 시간</SettingLabel>
                                         <SettingControl style={{ gap: '6px' }}>
                                             <select 
-                                                value={tgHour} 
-                                                onChange={(e) => handleTelegramTimeChange(e.target.value, tgMinute)}
+                                                value={alarmHour} 
+                                                onChange={(e) => handleAlarmTimeChange(e.target.value, alarmMinute)}
                                                 style={{
                                                     padding: '4px 8px',
                                                     borderRadius: '6px',
@@ -5145,8 +5123,8 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
                                                 })}
                                             </select>
                                             <select 
-                                                value={tgMinute} 
-                                                onChange={(e) => handleTelegramTimeChange(tgHour, e.target.value)}
+                                                value={alarmMinute} 
+                                                onChange={(e) => handleAlarmTimeChange(alarmHour, e.target.value)}
                                                 style={{
                                                     padding: '4px 8px',
                                                     borderRadius: '6px',
@@ -5163,97 +5141,283 @@ function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setSt
                                             </select>
                                         </SettingControl>
                                     </SettingRow>
-                                </>
+                                )}
+                                <p style={{ fontSize: '0.7rem', color: 'var(--sba-text-muted)', margin: '6px 0 0 0', lineHeight: '1.4' }}>
+                                    ※ 화면이 꺼져도 수신됩니다. iOS는 '홈 화면에 추가(PWA)'한 경우에만 수신 가능합니다.
+                                </p>
+                            </div>
+
+                            {/* 알림 즉시 테스트 버튼 */}
+                            {alarmEnabled && (
+                                <button 
+                                    onClick={handleTestNotification}
+                                    disabled={isTesting}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        fontSize: '0.85rem',
+                                        border: '1px solid var(--sba-border-strong)',
+                                        borderRadius: '8px',
+                                        background: 'transparent',
+                                        color: 'var(--sba-text)',
+                                        cursor: 'pointer',
+                                        fontWeight: '600',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px',
+                                        transition: 'background-color 0.2s',
+                                        marginTop: '4px'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--sba-card-sub-bg)'}
+                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                    {isTesting ? '테스트 발송 중...' : '알림 즉시 테스트하기'}
+                                </button>
                             )}
                         </div>
-                    )}
 
-                    {/* 알림 즉시 테스트 버튼 */}
-                    {(alarmEnabled || (session && telegramChatId)) && (
-                        <button 
-                            onClick={handleTestNotification}
-                            disabled={isTesting}
-                            style={{
-                                width: '100%',
-                                padding: '10px',
-                                fontSize: '0.85rem',
-                                border: '1px solid var(--sba-border-strong)',
-                                borderRadius: '8px',
-                                background: 'transparent',
-                                color: 'var(--sba-text)',
-                                cursor: 'pointer',
-                                fontWeight: '600',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                transition: 'background-color 0.2s',
-                                marginTop: '4px'
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--sba-card-sub-bg)'}
-                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                        >
-                            {isTesting ? '테스트 발송 중...' : '알림 즉시 테스트하기'}
-                        </button>
-                    )}
-                </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px', borderTop: '1px solid var(--sba-border)', paddingTop: '12px' }}>
+                            <span>북마크: {stats.bookmarks}개 | 메모: {stats.notes}개</span>
+                            <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 데이터 초기화</DeleteTextButton>
+                        </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px', borderTop: '1px solid var(--sba-border)', paddingTop: '12px' }}>
-                    <span>북마크: {stats.bookmarks}개 | 메모: {stats.notes}개</span>
-                    <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 데이터 초기화</DeleteTextButton>
-                </div>
-
-                {isAdmin && (
-                    <>
-                        <p style={{fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '16px 0 12px', borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '12px'}}>
-                            <b>관리자 전용 설정 (Admin)</b>
-                        </p>
+                        {/* 교회 관리자용 대시보드 버튼 */}
+                        {isAdmin && (
+                            <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
+                                    <b>교회 관리자 대시보드</b>
+                                </p>
+                                <ButtonGroup style={{ display: 'flex', gap: '8px' }}>
+                                    <ShadButton onClick={() => setActiveSubTab('admin_generate')} $variant="accent">
+                                        일정 자동 생성기
+                                    </ShadButton>
+                                    <ShadButton onClick={() => setActiveSubTab('admin_edit')} $variant="outline">
+                                        일정 달력 수동 수정
+                                    </ShadButton>
+                                </ButtonGroup>
+                            </div>
+                        )}
                         
-                        <FormGroup>
-                            <FormLabel>시작 기준일 (localStorage)</FormLabel>
-                            <FormInput 
-                                type="date" 
-                                value={startDateStr} 
-                                onChange={e => setStartDateStr(e.target.value)}
-                            />
-                        </FormGroup>
-                        
-                        <FormGroup>
-                            <FormLabel>Purge 관리자 토큰</FormLabel>
-                            <FormInput 
-                                type="password" 
-                                value={token} 
-                                onChange={e => setToken(e.target.value)}
-                            />
-                        </FormGroup>
-
-                        <AdminSectionTitle>지체들의 묵상 공유글 관리</AdminSectionTitle>
-                        <AdminReflList>
-                            {refls.length === 0 ? (
-                                <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--sba-text-muted)', padding: '10px 0' }}>공유된 글이 없습니다.</div>
-                            ) : (
-                                refls.map(r => (
-                                    <AdminReflItem key={r.id}>
-                                        <span>{r.author_name} - {r.passage}</span>
-                                        <DeleteTextButton onClick={() => handleDeleteRefl(r.id)}>삭제</DeleteTextButton>
-                                    </AdminReflItem>
-                                ))
-                            )}
-                        </AdminReflList>
-                        
-                        <ButtonGroup style={{ flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
-                            <ShadButton $variant="accent" onClick={handleSync} disabled={syncing}>
-                                {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
+                        <ButtonGroup style={{ marginTop: '20px' }}>
+                            <ShadButton onClick={onClose}>
+                                확인
                             </ShadButton>
                         </ButtonGroup>
                     </>
                 )}
-                
-                <ButtonGroup style={{ marginTop: '20px' }}>
-                    <ShadButton onClick={onClose}>
-                        확인
-                    </ShadButton>
-                </ButtonGroup>
+
+                {activeSubTab === 'admin_generate' && (
+                    <>
+                        <ModalHeader>
+                            <ModalTitle>일정 자동 생성기</ModalTitle>
+                            <ModalCloseButton onClick={() => setActiveSubTab('settings')}>✕</ModalCloseButton>
+                        </ModalHeader>
+                        
+                        <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '4px' }}>
+                            <FormGroup>
+                                <FormLabel>큐티 일정 시작 날짜</FormLabel>
+                                <FormInput 
+                                    type="date" 
+                                    value={genStartDate}
+                                    onChange={e => setGenStartDate(e.target.value)}
+                                />
+                            </FormGroup>
+
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <FormLabel>시작 성경</FormLabel>
+                                    <select 
+                                        value={genStartBook} 
+                                        onChange={e => setGenStartBook(e.target.value)}
+                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
+                                    >
+                                        {BIBLE_BOOKS.map(b => (
+                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
+                                        ))}
+                                    </select>
+                                </FormGroup>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <FormLabel>시작 장</FormLabel>
+                                    <FormInput 
+                                        type="number" 
+                                        min="1" 
+                                        value={genStartChap}
+                                        onChange={e => setGenStartChap(parseInt(e.target.value) || 1)}
+                                    />
+                                </FormGroup>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <FormLabel>종료 성경</FormLabel>
+                                    <select 
+                                        value={genEndBook} 
+                                        onChange={e => setGenEndBook(e.target.value)}
+                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
+                                    >
+                                        {BIBLE_BOOKS.map(b => (
+                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
+                                        ))}
+                                    </select>
+                                </FormGroup>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <FormLabel>종료 장</FormLabel>
+                                    <FormInput 
+                                        type="number" 
+                                        min="1" 
+                                        value={genEndChap}
+                                        onChange={e => setGenEndChap(parseInt(e.target.value) || 1)}
+                                    />
+                                </FormGroup>
+                            </div>
+
+                            <FormGroup>
+                                <FormLabel>하루당 진행할 분량 (장수)</FormLabel>
+                                <FormInput 
+                                    type="number" 
+                                    min="1" 
+                                    value={genPagesPerDay}
+                                    onChange={e => setGenPagesPerDay(parseInt(e.target.value) || 1)}
+                                />
+                            </FormGroup>
+
+                            <FormGroup>
+                                <FormLabel>제외할 요일 선택</FormLabel>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginTop: '6px' }}>
+                                    {['일', '월', '화', '수', '목', '금', '토'].map((day, idx) => (
+                                        <label key={day} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={genExcludeDays.includes(idx)}
+                                                onChange={e => {
+                                                    if (e.target.checked) {
+                                                        setGenExcludeDays([...genExcludeDays, idx]);
+                                                    } else {
+                                                        setGenExcludeDays(genExcludeDays.filter(d => d !== idx));
+                                                    }
+                                                }}
+                                            />
+                                            {day}요일
+                                        </label>
+                                    ))}
+                                </div>
+                            </FormGroup>
+                        </div>
+
+                        <ButtonGroup style={{ marginTop: '20px' }}>
+                            <ShadButton $variant="outline" onClick={() => setActiveSubTab('settings')}>
+                                취소
+                            </ShadButton>
+                            <ShadButton onClick={handleGenerateSchedule} disabled={syncing} $variant="accent">
+                                {syncing ? '생성 계산 중...' : '자동 생성 및 덮어쓰기'}
+                            </ShadButton>
+                        </ButtonGroup>
+                    </>
+                )}
+
+                {activeSubTab === 'admin_edit' && (
+                    <>
+                        <ModalHeader>
+                            <ModalTitle>일정 달력 수동 수정</ModalTitle>
+                            <ModalCloseButton onClick={() => setActiveSubTab('settings')}>✕</ModalCloseButton>
+                        </ModalHeader>
+                        
+                        <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '4px' }}>
+                            <FormGroup>
+                                <FormLabel>수정할 날짜 선택</FormLabel>
+                                <FormInput 
+                                    type="date" 
+                                    value={editDate}
+                                    onChange={e => setEditDate(e.target.value)}
+                                />
+                            </FormGroup>
+
+                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--sba-border)', marginBottom: '16px' }}>
+                                <p style={{ fontSize: '0.8rem', fontWeight: 'bold', margin: '0 0 10px 0', borderBottom: '1px solid var(--sba-border-strong)', paddingBottom: '4px' }}>1. 오늘의 묵상 (QT)</p>
+                                
+                                <FormGroup>
+                                    <FormLabel>묵상 성경 권</FormLabel>
+                                    <select 
+                                        value={editQtBook} 
+                                        onChange={e => setEditQtBook(e.target.value)}
+                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
+                                    >
+                                        <option value="">없음</option>
+                                        {BIBLE_BOOKS.map(b => (
+                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
+                                        ))}
+                                    </select>
+                                </FormGroup>
+
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>시작 장</FormLabel>
+                                        <FormInput type="number" min="1" value={editQtStartChap} onChange={e => setEditQtStartChap(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>시작 절</FormLabel>
+                                        <FormInput type="number" min="1" value={editQtStartVerse} onChange={e => setEditQtStartVerse(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>종료 장</FormLabel>
+                                        <FormInput type="number" min="1" value={editQtEndChap} onChange={e => setEditQtEndChap(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>종료 절</FormLabel>
+                                        <FormInput type="number" min="1" value={editQtEndVerse} onChange={e => setEditQtEndVerse(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                </div>
+
+                                <FormGroup>
+                                    <FormLabel>묵상 본문 제목</FormLabel>
+                                    <FormInput type="text" placeholder="예: 말씀으로 굳건히 서는 교회" value={editQtTitle} onChange={e => setEditQtTitle(e.target.value)} />
+                                </FormGroup>
+                            </div>
+
+                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--sba-border)' }}>
+                                <p style={{ fontSize: '0.8rem', fontWeight: 'bold', margin: '0 0 10px 0', borderBottom: '1px solid var(--sba-border-strong)', paddingBottom: '4px' }}>2. 성경 통독 (Reading)</p>
+                                
+                                <FormGroup>
+                                    <FormLabel>통독 성경 권</FormLabel>
+                                    <select 
+                                        value={editReadingBook} 
+                                        onChange={e => setEditReadingBook(e.target.value)}
+                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
+                                    >
+                                        <option value="">없음</option>
+                                        {BIBLE_BOOKS.map(b => (
+                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
+                                        ))}
+                                    </select>
+                                </FormGroup>
+
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>시작 장</FormLabel>
+                                        <FormInput type="number" min="1" value={editReadingStartChap} onChange={e => setEditReadingStartChap(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>종료 장</FormLabel>
+                                        <FormInput type="number" min="1" value={editReadingEndChap} onChange={e => setEditReadingEndChap(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                </div>
+                            </div>
+                        </div>
+
+                        <ButtonGroup style={{ marginTop: '20px' }}>
+                            <ShadButton $variant="outline" onClick={() => setActiveSubTab('settings')}>
+                                취소
+                            </ShadButton>
+                            <ShadButton onClick={handleUpdateSchedule} disabled={syncing} $variant="accent">
+                                {syncing ? '저장 중...' : '일정 저장하기'}
+                            </ShadButton>
+                        </ButtonGroup>
+                    </>
+                )}
             </ModalContent>
         </ModalOverlay>
     );
@@ -5639,13 +5803,244 @@ function AuthModal({ isOpen, onClose, addToast }) {
     );
 }
 
+// ==========================================
+// 5. Accordion (styled-components)
+// ==========================================
+const Accordion = styled.div`
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--sba-card-bg);
+  width: 100%;
+`;
+
+const AccordionItem = styled.div`
+  border-bottom: 1px solid var(--sba-border);
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+const AccordionTrigger = styled.button`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  color: var(--sba-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: var(--sba-card-sub-bg);
+  }
+`;
+
+const AccordionContent = styled.div`
+  padding: 16px;
+  background-color: var(--sba-card-sub-bg);
+  color: var(--sba-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  border-top: 1px solid var(--sba-border);
+  display: ${props => props.$isOpen ? 'block' : 'none'};
+`;
+
+// ==========================================
+// 6. Table (styled-components)
+// ==========================================
+const Table = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 0.875rem;
+  text-align: left;
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+`;
+
+const TableHeader = styled.thead`
+  background-color: var(--sba-card-sub-bg);
+  border-bottom: 2px solid var(--sba-border-strong);
+`;
+
+const TableRow = styled.tr`
+  border-bottom: 1px solid var(--sba-border);
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: var(--sba-card-active);
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+const TableHead = styled.th`
+  padding: 12px 16px;
+  font-weight: 600;
+  color: var(--sba-text);
+`;
+
+const TableBody = styled.tbody`
+  background-color: var(--sba-card-bg);
+`;
+
+const TableCell = styled.td`
+  padding: 12px 16px;
+  color: var(--sba-text-secondary);
+`;
+
 
 // ==========================================
 // 5. Main Export App
 // ==========================================
 
 
-const DEFAULT_START_DATE = "2024-12-17";
+// ====================================================
+// Theme Configs (Shadcn Slate 무채색 기반)
+// ====================================================
+const baseShadcnTheme = {
+  light: {
+    primary: '#0f172a', // slate-900
+    primaryRgb: '15, 23, 42',
+    bg: '#fafafa',
+    text: '#09090b',
+    textSecondary: '#4b5563',
+    textMuted: '#9ca3af',
+    textSubtle: '#d1d5db',
+    border: '#e2e8f0',
+    borderStrong: '#cbd5e1',
+    cardBg: '#ffffff',
+    cardHover: '#f8fafc',
+    cardActive: '#f1f5f9',
+    cardTodayBg: '#ffffff',
+    cardTodayBorder: '#0f172a',
+    cardSubBg: '#f8fafc',
+    navBg: 'rgba(255, 255, 255, 0.85)',
+    navActive: '#0f172a',
+    navInactive: '#94a3b8',
+    modalBg: '#ffffff',
+    inputBorder: '#cbd5e1',
+    btnBg: '#0f172a',
+    btnText: '#ffffff',
+    btnHover: '#000000',
+    verseTitle: '#0f172a',
+    verseText: '#1e293b',
+    verseNum: '#64748b',
+    splashBg: '#f8fafc',
+    splashTitle: '#0f172a',
+    splashSub: '#64748b',
+    splashDesc: '#94a3b8',
+    highlight: 'rgba(245, 158, 11, 0.25)',
+    highlightHover: 'rgba(245, 158, 11, 0.4)',
+    skeletonBg: '#e2e8f0',
+    skeletonShine: '#f1f5f9',
+    accent: '#f1f5f9',
+  },
+  dark: {
+    primary: '#f1f5f9', // slate-100
+    primaryRgb: '241, 245, 249',
+    bg: '#09090b', // slate-950
+    text: '#fafafa',
+    textSecondary: '#94a3b8',
+    textMuted: '#64748b',
+    textSubtle: '#475569',
+    border: '#1e293b',
+    borderStrong: '#334155',
+    cardBg: '#0f172a',
+    cardHover: '#1e293b',
+    cardActive: '#1e293b',
+    cardTodayBg: '#0f172a',
+    cardTodayBorder: '#f1f5f9',
+    cardSubBg: '#09090b',
+    navBg: 'rgba(9, 9, 11, 0.85)',
+    navActive: '#f1f5f9',
+    navInactive: '#475569',
+    modalBg: '#0f172a',
+    inputBorder: '#334155',
+    btnBg: '#f1f5f9',
+    btnText: '#0f172a',
+    btnHover: '#cbd5e1',
+    verseTitle: '#fafafa',
+    verseText: '#cbd5e1',
+    verseNum: '#475569',
+    splashBg: '#09090b',
+    splashTitle: '#f1f5f9',
+    splashSub: '#94a3b8',
+    splashDesc: '#475569',
+    highlight: 'rgba(245, 158, 11, 0.4)',
+    highlightHover: 'rgba(245, 158, 11, 0.55)',
+    skeletonBg: '#1e293b',
+    skeletonShine: '#334155',
+    accent: '#1e293b',
+  }
+};
+
+const hexToRgb = (hex) => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '15, 23, 42';
+};
+
+const getDynamicTheme = (isDark, userChurch) => {
+  const mode = isDark ? 'dark' : 'light';
+  const base = baseShadcnTheme[mode];
+  if (userChurch && userChurch.theme_color) {
+    return {
+      ...base,
+      primary: userChurch.theme_color,
+      primaryRgb: hexToRgb(userChurch.theme_color),
+    };
+  }
+  return base;
+};
+
+const GlobalStyle = createGlobalStyle`
+  :root {
+    --sba-primary: ${props => props.theme.primary};
+    --sba-primary-rgb: ${props => props.theme.primaryRgb};
+    --sba-bg: ${props => props.theme.bg};
+    --sba-text: ${props => props.theme.text};
+    --sba-text-secondary: ${props => props.theme.textSecondary};
+    --sba-text-muted: ${props => props.theme.textMuted};
+    --sba-text-subtle: ${props => props.theme.textSubtle};
+    --sba-border: ${props => props.theme.border};
+    --sba-border-strong: ${props => props.theme.borderStrong};
+    --sba-card-bg: ${props => props.theme.cardBg};
+    --sba-card-hover: ${props => props.theme.cardHover};
+    --sba-card-active: ${props => props.theme.cardActive};
+    --sba-card-today-bg: ${props => props.theme.cardTodayBg};
+    --sba-card-today-border: ${props => props.theme.cardTodayBorder};
+    --sba-card-sub-bg: ${props => props.theme.cardSubBg};
+    --sba-nav-bg: ${props => props.theme.navBg};
+    --sba-nav-active: ${props => props.theme.navActive};
+    --sba-nav-inactive: ${props => props.theme.navInactive};
+    --sba-modal-bg: ${props => props.theme.modalBg};
+    --sba-input-border: ${props => props.theme.inputBorder};
+    --sba-btn-bg: ${props => props.theme.btnBg};
+    --sba-btn-text: ${props => props.theme.btnText};
+    --sba-btn-hover: ${props => props.theme.btnHover};
+    --sba-verse-title: ${props => props.theme.verseTitle};
+    --sba-verse-text: ${props => props.theme.verseText};
+    --sba-verse-num: ${props => props.theme.verseNum};
+    --sba-splash-bg: ${props => props.theme.splashBg};
+    --sba-splash-title: ${props => props.theme.splashTitle};
+    --sba-splash-sub: ${props => props.theme.splashSub};
+    --sba-splash-desc: ${props => props.theme.splashDesc};
+    --sba-highlight: ${props => props.theme.highlight};
+    --sba-highlight-hover: ${props => props.theme.highlightHover};
+    --sba-skeleton-bg: ${props => props.theme.skeletonBg};
+    --sba-skeleton-shine: ${props => props.theme.skeletonShine};
+    --sba-accent: ${props => props.theme.accent};
+  }
+`;
 
 // 지수 백오프 기반 패치 유틸리티
 async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
@@ -5663,6 +6058,187 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
     }
 }
 
+// ----------------------------------------------------
+// Styled Components for Onboarding UI (Shadcn-like)
+// ----------------------------------------------------
+const OnboardingOverlay = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--sba-bg, #f9fafb);
+  color: var(--sba-text, #111827);
+  font-family: inherit;
+`;
+
+const OnboardingCard = styled.div`
+  width: 100%;
+  max-width: 440px;
+  background: var(--sba-modal-bg, #ffffff);
+  border: 1px solid var(--sba-border-strong, #e5e7eb);
+  border-radius: 16px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  padding: 32px 28px;
+`;
+
+const OnboardingHeader = styled.div`
+  margin-bottom: 24px;
+  text-align: center;
+`;
+
+const OnboardingTitle = styled.h2`
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  color: var(--sba-text);
+`;
+
+const OnboardingDesc = styled.p`
+  font-size: 0.875rem;
+  color: var(--sba-text-secondary, #6b7280);
+  margin: 0;
+  line-height: 1.5;
+`;
+
+const TabButtonGroup = styled.div`
+  display: flex;
+  background: var(--sba-card-sub-bg, #f3f4f6);
+  padding: 4px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+`;
+
+const TabButton = styled.button`
+  flex: 1;
+  border: none;
+  background: ${props => props.$active ? 'var(--sba-modal-bg, #ffffff)' : 'transparent'};
+  color: ${props => props.$active ? 'var(--sba-text, #111827)' : 'var(--sba-text-secondary, #6b7280)'};
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: ${props => props.$active ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'};
+  transition: all 0.2s;
+`;
+
+const FormField = styled.div`
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+const FormLabel = styled.label`
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--sba-text-secondary);
+`;
+
+const FormInput = styled.input`
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--sba-border-strong, #d1d5db);
+  background: var(--sba-bg, #ffffff);
+  color: var(--sba-text, #111827);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s;
+  &:focus {
+    border-color: var(--sba-primary, #8B4513);
+  }
+`;
+
+const ColorPresetGroup = styled.div`
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+`;
+
+const ColorCircle = styled.div`
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: ${props => props.$color};
+  cursor: pointer;
+  border: 2px solid ${props => props.$active ? 'var(--sba-text)' : 'transparent'};
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transition: transform 0.15s;
+  &:hover {
+    transform: scale(1.1);
+  }
+`;
+
+const ActionButton = styled.button`
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: var(--sba-primary, #8B4513);
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  &:hover {
+    opacity: 0.9;
+  }
+  &:disabled {
+    background: var(--sba-border-strong, #cccccc);
+    cursor: not-allowed;
+  }
+`;
+
+const SocialButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-top: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: ${props => props.$provider === 'google' ? '1px solid var(--sba-border-strong)' : 'none'};
+  background: ${props => props.$provider === 'google' ? 'var(--sba-modal-bg)' : '#fee500'};
+  color: ${props => props.$provider === 'google' ? 'var(--sba-text)' : '#191919'};
+  &:hover {
+    background: ${props => props.$provider === 'google' ? 'var(--sba-card-sub-bg)' : '#fdd835'};
+  }
+`;
+
+const SearchResultList = styled.div`
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid var(--sba-border);
+  border-radius: 8px;
+  margin-top: 8px;
+  background: var(--sba-card-sub-bg);
+`;
+
+const SearchResultItem = styled.div`
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: ${props => props.$selected ? 'var(--sba-border)' : 'transparent'};
+  &:hover {
+    background: var(--sba-border-strong);
+  }
+`;
+
  function SBA_QT_App() {
     const [scheduleData, setScheduleData] = useState(null);
     const [currentDate, setCurrentDate] = useState(getEffectiveDate());
@@ -5677,30 +6253,41 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
     const [error, setError] = useState(null);
     const [toasts, setToasts] = useState([]);
     
-    // 다크모드 및 소셜 세션
+    // 다크모드 및 소셜 세션 / 교회 정보
     const [isDark, setIsDark] = useState(() => {
-        // 초기화 시 로컬 스토리지 또는 OS 테마 상태 확인
         const saved = localStorage.getItem('sba_theme');
         if (saved) return saved === 'dark';
         return window.matchMedia('(prefers-color-scheme: dark)').matches;
     });
     const [session, setSession] = useState(null);
+    const [userChurch, setUserChurch] = useState(null);
+    const [checkingChurch, setCheckingChurch] = useState(true);
     const [bookmarkTrigger, setBookmarkTrigger] = useState(0);
 
     // 모달 관리
     const [showCalendar, setShowCalendar] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showAuth, setShowAuth] = useState(false);
-    const [adminClicks, setAdminClicks] = useState(0);
     
-    // 시작 기준일 상태 (기본값 설정 및 로컬스토리지 로딩)
-    const [startDateStr, setStartDateStr] = useState(() => {
-        return localStorage.getItem('sba_admin_date') || DEFAULT_START_DATE;
-    });
+    // 온보딩 가입/개설 탭
+    const [onboardingTab, setOnboardingTab] = useState('join');
+    
+    // 온보딩 관련 인풋 상태들
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [selectedChurch, setSelectedChurch] = useState(null);
+    const [inviteCode, setInviteCode] = useState('');
+    const [newChurchName, setNewChurchName] = useState('');
+    const [newInviteCode, setNewInviteCode] = useState('');
+    const [newIsPublic, setNewIsPublic] = useState(true);
+    const [newThemeColor, setNewThemeColor] = useState('#8B4513');
+    const [submitting, setSubmitting] = useState(false);
 
     // 스플래시 스크린 관리
     const [isSplashVisible, setIsSplashVisible] = useState(true);
     const [isSplashFading, setIsSplashFading] = useState(false);
+
+    const colorPresets = ['#8B4513', '#556B2F', '#1A365D', '#2D3748', '#4A5568'];
 
     // Toast 토스트 알림 추가 함수
     const addToast = (message) => {
@@ -5714,21 +6301,44 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
     // 다크모드 적용 효과
     useEffect(() => {
         localStorage.setItem('sba_theme', isDark ? 'dark' : 'light');
-        const container = document.querySelector('.sba-app-container');
-        if (container) {
-            if (isDark) container.classList.add('dark');
-            else container.classList.remove('dark');
-        }
     }, [isDark]);
 
-    // 시작 기준일 변경 시 로컬스토리지 반영
-    const handleSetStartDateStr = (newDateStr) => {
-        setStartDateStr(newDateStr);
-        localStorage.setItem('sba_admin_date', newDateStr);
-        addToast('큐티 시작 기준일이 수정되었습니다.');
+    const theme = useMemo(() => getDynamicTheme(isDark, userChurch), [isDark, userChurch]);
+
+    // 소속 교회 확인 함수
+    const fetchUserChurch = async (userId) => {
+        setCheckingChurch(true);
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            const authKey = 'sb-ebfpjvwwbognddixrvyc-auth-token';
+            const savedSession = localStorage.getItem(authKey);
+            if (savedSession) {
+                try {
+                    const parsed = JSON.parse(savedSession);
+                    if (parsed?.access_token) {
+                        headers['Authorization'] = `Bearer ${parsed.access_token}`;
+                    }
+                } catch (e) {}
+            }
+
+            const res = await fetch('/api/churches/mine', {
+                method: 'GET',
+                headers
+            });
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            const data = await res.json();
+            setUserChurch(data);
+        } catch (err) {
+            console.error('교회 정보 조회 실패:', err);
+            addToast('교회 정보를 불러오지 못했습니다.');
+        } finally {
+            setCheckingChurch(false);
+        }
     };
 
-    // Supabase Auth 세션 감지 및 자동 동기화
+    // Supabase Auth 세션 감지
     useEffect(() => {
         const syncAlarmSettingsFromMetadata = (sess) => {
             if (sess && sess.user && sess.user.user_metadata) {
@@ -5746,12 +6356,15 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
             setSession(session);
             if (session) {
                 syncAlarmSettingsFromMetadata(session);
+                fetchUserChurch(session.user.id);
                 syncLocalDataToCloud().then((res) => {
                     if (res.success) {
                         addToast('소셜 클라우드와 북마크/메모가 동기화되었습니다.');
                         setBookmarkTrigger(prev => prev + 1);
                     }
                 });
+            } else {
+                setCheckingChurch(false);
             }
         });
 
@@ -5759,12 +6372,16 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
             setSession(session);
             if (session) {
                 syncAlarmSettingsFromMetadata(session);
+                fetchUserChurch(session.user.id);
                 syncLocalDataToCloud().then((res) => {
                     if (res.success) {
                         addToast('소셜 클라우드와 북마크/메모가 동기화되었습니다.');
                         setBookmarkTrigger(prev => prev + 1);
                     }
                 });
+            } else {
+                setUserChurch(null);
+                setCheckingChurch(false);
             }
         });
 
@@ -5791,8 +6408,8 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
 
                 if (currentHourMin === alarmTime && lastNotified !== todayStr) {
                     try {
-                        const notification = new Notification("서울북부교회 QT & 통독", {
-                            body: "오늘의 큐티 말씀이 도착했습니다. 말씀과 함께 은혜로운 하루를 시작해 보세요!",
+                        const notification = new Notification("교회 QT & 통독", {
+                            body: "오늘의 말씀 일정이 도착했습니다. 말씀과 함께 은혜로운 하루를 시작해 보세요!",
                             icon: "/favicon.ico"
                         });
                         notification.onclick = () => {
@@ -5813,32 +6430,38 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
         return () => clearInterval(timer);
     }, [session, setActiveTab]);
 
-    // 스케줄 데이터 로딩 함수 (지수 백오프 및 fallback 연동)
+    // 스케줄 데이터 로딩 함수 (백엔드 API 연동)
     const loadSchedule = async () => {
+        if (!userChurch) return;
         setLoading(true);
         setError(null);
         try {
-            // 1. 백엔드 시트 API 호출 시도
-            const data = await fetchWithRetry('/api/sba-qt');
+            const year = currentDate.getFullYear();
+            const startDate = `${year}-01-01`;
+            const endDate = `${year}-12-31`;
+
+            const headers = {};
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+
+            const data = await fetchWithRetry(`/api/qt-schedule?church_id=${userChurch.id}&start_date=${startDate}&end_date=${endDate}`, { headers });
             setScheduleData(data);
         } catch (err) {
-            console.warn("백엔드 API 호출 실패, 로컬 폴백 데이터를 로드합니다.", err);
-            try {
-                // 2. 실패 시 로컬 fallback_schedule.json 호출
-                const fallbackData = await fetchWithRetry('/fallback_schedule.json');
-                setScheduleData(fallbackData);
-            } catch (fallbackErr) {
-                console.error("폴백 데이터 로드도 실패했습니다.", fallbackErr);
-                setError("일정 데이터를 불러오지 못했습니다. 네트워크 연결을 확인해 주세요.");
-            }
+            console.error("일정 불러오기 실패:", err);
+            setError("일정 데이터를 불러오지 못했습니다. 관리자에게 문의해 주세요.");
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadSchedule();
-        
+        if (userChurch) {
+            loadSchedule();
+        }
+    }, [userChurch, currentDate]);
+
+    useEffect(() => {
         // 첫 진입 시 히스토리 초기화
         window.history.replaceState({ tab: activeTab }, '');
 
@@ -5875,7 +6498,6 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
                 setShowCalendar(false);
                 setShowSettings(false);
                 setShowAuth(false);
-                // 모달만 닫고 히스토리 스택 원복
                 window.history.pushState({ tab: activeTab }, '');
                 return;
             }
@@ -5909,16 +6531,13 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
         };
     }, []);
 
-    // 렌더링 안전성 보장 (State 유효 체크 및 복구)
     const effectiveDate = useMemo(() => {
         if (currentDate instanceof Date && !isNaN(currentDate.getTime())) {
             return currentDate;
         }
-        console.error("Invalid Date가 감지되어 강제 복구를 실행합니다.");
         return getMidnightKST(new Date());
     }, [currentDate]);
 
-    // 비동기 갱신 시점에 Invalid Date 상태가 기록된 경우 감지하여 정화
     useEffect(() => {
         if (!currentDate || isNaN(currentDate.getTime())) {
             setCurrentDate(getMidnightKST(new Date()));
@@ -5931,71 +6550,50 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
 
     const weekDayIdx = targetKST.getUTCDay();
 
-    // 주간 7일간의 일정 계산 (O(1))
+    // 주간 7일간의 일정 계산
     const dailyPlans = useMemo(() => {
         if (!scheduleData) return {};
         
         const diffToMonday = weekDayIdx === 0 ? -6 : 1 - weekDayIdx;
         const plans = {};
-        const parsedStartDate = new Date(startDateStr);
-        const startKST = getMidnightKST(
-            parsedStartDate instanceof Date && !isNaN(parsedStartDate.getTime()) 
-                ? parsedStartDate 
-                : new Date(DEFAULT_START_DATE)
-        );
 
         for (let i = 0; i < 7; i++) {
             const d = new Date(targetKST.getTime());
             d.setUTCDate(targetKST.getUTCDate() + diffToMonday + i);
             
+            const dateStr = d.toISOString().split('T')[0];
             const dMonth = d.getUTCMonth() + 1;
             const dDay = d.getUTCDate();
             const dKey = `${String(dMonth).padStart(2, '0')}.${String(dDay).padStart(2, '0')}`;
             const dayName = DAYS_ARR[d.getUTCDay()];
             
+            const row = scheduleData.find(s => s.date === dateStr);
+            
             let oldPlan = null;
             let newPlan = null;
 
-            if (dayName !== "일요일") {
-                const daysElapsed = calcQtDays(startKST, d);
-                if (daysElapsed > 0) {
-                    let count = 0;
-                    for (const row of scheduleData.qt_plan) {
-                        const sp = parseInt(row.start_paragraph);
-                        const ep = parseInt(row.end_paragraph);
-                        const paras = ep - sp + 1;
-                        if (count + paras >= daysElapsed) {
-                            const verse = sp + (daysElapsed - count - 1);
-                            oldPlan = { abbrev: FULL_TO_SHORT[row.chapter] || row.chapter, verse: verse.toString() };
-                            break;
-                        }
-                        count += paras;
-                    }
+            if (row) {
+                if (row.qt_book) {
+                    oldPlan = {
+                        abbrev: row.qt_book,
+                        verse: row.qt_start_chap?.toString() || "1",
+                        start_verse: row.qt_start_verse || 1,
+                        end_verse: row.qt_end_verse || 30,
+                        title: row.qt_title || ""
+                    };
+                }
+                if (row.reading_book) {
+                    newPlan = {
+                        books: [row.reading_book],
+                        verseRaw: `${row.reading_start_chap}-${row.reading_end_chap}`
+                    };
                 }
             }
 
-            const readingRow = scheduleData.reading_plan.find(r => 
-                parseInt(r.month) === dMonth && parseInt(r.day) === dDay
-            );
-
-            if (readingRow && readingRow.chapter !== "없음" && readingRow.verse !== "없음") {
-                newPlan = { books: readingRow.chapter.replace(/"/g,'').split(','), verseRaw: readingRow.verse };
-            }
-
-            plans[dKey] = { dayName, old: oldPlan, new: newPlan, dateObj: d };
+            plans[dKey] = { dayName, old: oldPlan, new: newPlan, dateObj: d, rawRow: row };
         }
         return plans;
-    }, [scheduleData, targetKST, startDateStr, weekDayIdx]);
-
-    const handleAdminClick = () => {
-        const next = adminClicks + 1;
-        if (next >= 5) {
-            setShowSettings(true);
-            setAdminClicks(0);
-        } else {
-            setAdminClicks(next);
-        }
-    };
+    }, [scheduleData, targetKST, weekDayIdx]);
 
     const handleWeekCardClick = (dateObj) => {
         if (dateObj instanceof Date && !isNaN(dateObj.getTime())) {
@@ -6018,92 +6616,148 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
         let found = false;
 
         if (scheduleData) {
-            const parsedStartDate = new Date(startDateStr);
-            const startKST = getMidnightKST(
-                parsedStartDate instanceof Date && !isNaN(parsedStartDate.getTime()) 
-                    ? parsedStartDate 
-                    : new Date(DEFAULT_START_DATE)
+            // 1. 묵상(QT)에서 검색
+            const qtMatch = scheduleData.find(s => 
+                s.qt_book === book && 
+                s.qt_start_chap <= chapter && chapter <= s.qt_end_chap
             );
-            
-            if (startKST instanceof Date && !isNaN(startKST.getTime())) {
-                let count = 0;
-                for (const row of scheduleData.qt_plan) {
-                    const sp = parseInt(row.start_paragraph);
-                    const ep = parseInt(row.end_paragraph);
-                    const paras = ep - sp + 1;
-                    const rowBook = FULL_TO_SHORT[row.chapter] || row.chapter;
-                    
-                    if (rowBook === book && sp <= chapter && chapter <= ep) {
-                        const daysElapsed = count + (chapter - sp) + 1;
-                        
-                        // 일요일을 제외하고 daysElapsed 경과한 날짜를 구함
-                        let current = new Date(startKST.getTime());
-                        let elapsedCount = 0;
-                        let targetD = null;
-                        while (true) {
-                            if (current.getUTCDay() !== 0) {
-                                elapsedCount++;
-                                if (elapsedCount === daysElapsed) {
-                                    targetD = new Date(current.getTime());
-                                    break;
-                                }
-                            }
-                            current.setUTCDate(current.getUTCDate() + 1);
-                        }
-
-                        if (targetD && !isNaN(targetD.getTime())) {
-                            // targetDateObj는 currentDate 상태로 세팅되므로 로컬 타임존 기준으로 생성하여 날짜 밀림/요일 꼬임 방지
-                            targetDateObj = new Date(targetD.getUTCFullYear(), targetD.getUTCMonth(), targetD.getUTCDate());
-                            targetTab = 'today';
-                            found = true;
-                        }
-                        break;
-                    }
-                    count += paras;
-                }
+            if (qtMatch) {
+                const parts = qtMatch.date.split('-');
+                targetDateObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                targetTab = 'today';
+                found = true;
             }
 
-            // 2. 통독 계획에서 검색 (묵상에서 발견되지 않은 경우)
+            // 2. 통독에서 검색 (묵상에서 발견되지 않은 경우)
             if (!found) {
-                for (const row of scheduleData.reading_plan) {
-                    const books = row.chapter.replace(/"/g,'').split(',').map(b => b.trim());
-                    if (books.includes(book)) {
-                        const d = getMidnightKST(new Date());
-                        d.setUTCMonth(parseInt(row.month) - 1);
-                        d.setUTCDate(parseInt(row.day));
-                        if (d instanceof Date && !isNaN(d.getTime())) {
-                            targetDateObj = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-                            targetTab = 'reading';
-                            found = true;
-                        }
-                        break;
-                    }
+                const rdMatch = scheduleData.find(s => 
+                    s.reading_book === book && 
+                    s.reading_start_chap <= chapter && chapter <= s.reading_end_chap
+                );
+                if (rdMatch) {
+                    const parts = rdMatch.date.split('-');
+                    targetDateObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    targetTab = 'reading';
+                    found = true;
                 }
             }
         }
 
-        // 해당 일정 날짜와 탭으로 강제 전환
         if (targetDateObj instanceof Date && !isNaN(targetDateObj.getTime())) {
             setCurrentDate(targetDateObj);
             setActiveTab(targetTab);
         }
 
-        // Lazy Loading 통독/묵상 말씀 렌더링 후 DOM 탐색을 위해 600ms 딜레이
         setTimeout(() => {
             const elId = `verse-${book}-${chapter}-${verse}`;
             const el = document.getElementById(elId);
             if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 el.classList.add('flash-focus');
-                setTimeout(() => {
-                    el.classList.remove('flash-focus');
-                }, 2000);
-            } else {
-                console.warn("구절 엘리먼트를 찾지 못했습니다:", elId);
+                setTimeout(() => el.classList.remove('flash-focus'), 2000);
             }
         }, 600);
     };
 
+    // ----------------------------------------------------
+    // 온보딩 가입/개설 요청 처리 함수
+    // ----------------------------------------------------
+    const handleSearchChurch = async () => {
+        if (!searchQuery.trim()) return;
+        try {
+            const res = await fetch(`/api/churches?query=${encodeURIComponent(searchQuery)}`);
+            const data = await res.json();
+            if (res.ok) {
+                setSearchResults(data);
+                if (data.length === 0) addToast('검색 결과가 없습니다.');
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (e) {
+            alert('교회 검색 실패: ' + e.message);
+        }
+    };
+
+    const handleJoinChurch = async () => {
+        if (!selectedChurch) return;
+        setSubmitting(true);
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+            const res = await fetch('/api/churches/join', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    church_id: selectedChurch.id,
+                    invite_code: inviteCode
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                addToast(`${selectedChurch.name} 교회 가입이 완료되었습니다.`);
+                await fetchUserChurch(session.user.id);
+            } else {
+                throw new Error(data.error || '가입 실패');
+            }
+        } catch (err) {
+            alert('교회 가입에 실패했습니다: ' + err.message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleCreateChurch = async () => {
+        if (!newChurchName.trim()) {
+            alert('교회 이름을 입력해 주세요.');
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+            const res = await fetch('/api/churches', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    name: newChurchName.trim(),
+                    invite_code: newInviteCode.trim() || null,
+                    theme_color: newThemeColor,
+                    is_public: newIsPublic
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.id) {
+                addToast(`'${newChurchName}' 교회가 신규 개설 및 가입되었습니다.`);
+                await fetchUserChurch(session.user.id);
+            } else {
+                throw new Error(data.error || '개설 실패');
+            }
+        } catch (err) {
+            alert('교회 개설에 실패했습니다: ' + err.message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleOAuthLogin = async (provider) => {
+        try {
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider,
+                options: { redirectTo: window.location.origin }
+            });
+            if (error) throw error;
+        } catch (e) {
+            alert('로그인 에러: ' + e.message);
+        }
+    };
+
+    // ----------------------------------------------------
+    // 메인 콘텐츠 렌더러
+    // ----------------------------------------------------
     const renderContent = () => {
         if (loading) {
             return <div className="sba-loading">스케줄 로딩 중...</div>;
@@ -6156,94 +6810,303 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
 
             case 'sharing':
                 return (
-                    <>
-                        <SharingTab 
-                            session={session} 
-                            onOpenAuthModal={() => setShowAuth(true)} 
-                            addToast={addToast} 
-                            isDark={isDark} 
-                        />
-                        <div onClick={handleAdminClick} style={{textAlign: 'center', color: 'var(--sba-text-subtle)', padding: '10px', fontSize: '0.8rem', cursor: 'pointer', userSelect: 'none'}}>
-                            v5.2 (Supabase)
-                        </div>
-                    </>
+                    <SharingTab 
+                        session={session} 
+                        onOpenAuthModal={() => setShowAuth(true)} 
+                        addToast={addToast} 
+                        isDark={isDark} 
+                        userChurch={userChurch}
+                    />
                 );
             default:
                 return null;
         }
     };
 
+    // 로딩 혹은 RLS 조회 대기
+    if (checkingChurch) {
+        return (
+            <ThemeProvider theme={theme}>
+                <GlobalStyle />
+                <OnboardingOverlay>
+                    <div className="sba-loading">사용자 소속 정보를 조회하는 중...</div>
+                </OnboardingOverlay>
+            </ThemeProvider>
+        );
+    }
+
+    // 1. 비로그인 상태일 때 온보딩 노출 (소셜 로그인 유도)
+    if (!session) {
+        return (
+            <ThemeProvider theme={theme}>
+                <GlobalStyle />
+                <OnboardingOverlay className={isDark ? 'dark' : ''}>
+                    <OnboardingCard>
+                        <OnboardingHeader>
+                            <OnboardingTitle>말씀 QT & 통독</OnboardingTitle>
+                            <OnboardingDesc>
+                                교회별 일정 관리 및 묵상 공유, 매일 알림 설정을 위해 소셜 계정으로 로그인해 주세요.
+                            </OnboardingDesc>
+                        </OnboardingHeader>
+                        
+                        <SocialButton $provider="google" onClick={() => handleOAuthLogin('google')}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: '8px' }}><path fill="#EA4335" d="M12 5.04c1.74 0 3.3.6 4.53 1.78l3.38-3.38C17.86 1.54 15.17 1 12 1 7.24 1 3.2 3.82 1.34 7.92l3.96 3.07C6.26 7.63 8.92 5.04 12 5.04z"/><path fill="#4285F4" d="M23.49 12.27c0-.82-.07-1.61-.21-2.38H12v4.51h6.44c-.28 1.48-1.12 2.73-2.38 3.58l3.69 2.87c2.16-2 3.74-4.94 3.74-8.58z"/><path fill="#FBBC05" d="M5.3 14.79a7.16 7.16 0 0 1 0-4.54L1.34 7.18a11.96 11.96 0 0 0 0 9.64l3.96-3.03z"/><path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.69-2.87c-1.02.68-2.33 1.09-4.27 1.09-3.08 0-5.74-2.59-6.7-5.96L1.34 15.38C3.2 19.48 7.24 23 12 23z"/></svg>
+                            Google로 로그인
+                        </SocialButton>
+                        
+                        <SocialButton $provider="kakao" onClick={() => handleOAuthLogin('kakao')}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '8px' }}><path d="M12 3c-4.97 0-9 3.185-9 7.11 0 2.507 1.644 4.717 4.148 5.918-.173.65-.626 2.34-.716 2.684-.112.433.155.427.327.311.135-.09 2.148-1.464 3.003-2.046C10.428 17.054 11.2 17.11 12 17.11c4.97 0 9-3.185 9-7.11C21 6.185 16.97 3 12 3z"/></svg>
+                            카카오로 로그인
+                        </SocialButton>
+                    </OnboardingCard>
+                    
+                    {/* 토스트 팝업 렌더러 */}
+                    <div className="sba-toast-container">
+                        {toasts.map(t => (
+                            <div key={t.id} className="sba-toast">{t.message}</div>
+                        ))}
+                    </div>
+                </OnboardingOverlay>
+            </ThemeProvider>
+        );
+    }
+
+    // 2. 로그인되었으나 소속 교회가 없을 때 온보딩 노출 (가입/개설 유도)
+    if (!userChurch) {
+        return (
+            <ThemeProvider theme={theme}>
+                <GlobalStyle />
+                <OnboardingOverlay className={isDark ? 'dark' : ''}>
+                    <OnboardingCard>
+                        <OnboardingHeader>
+                            <OnboardingTitle>교회 연결하기</OnboardingTitle>
+                            <OnboardingDesc>
+                                기존 교회를 찾아 가입하거나, 본인의 소속 교회를 직접 개설하여 일정을 시작하세요.
+                            </OnboardingDesc>
+                        </OnboardingHeader>
+                        
+                        <TabButtonGroup>
+                            <TabButton $active={onboardingTab === 'join'} onClick={() => setOnboardingTab('join')}>교회 검색 가입</TabButton>
+                            <TabButton $active={onboardingTab === 'create'} onClick={() => setOnboardingTab('create')}>새 교회 개설</TabButton>
+                        </TabButtonGroup>
+
+                        {onboardingTab === 'join' ? (
+                            <>
+                                <FormField>
+                                    <FormLabel>교회 이름 검색</FormLabel>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <FormInput 
+                                            type="text" 
+                                            placeholder="교회 이름 입력 (예: 서울북부)" 
+                                            value={searchQuery}
+                                            onChange={e => setSearchQuery(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleSearchChurch()}
+                                        />
+                                        <button 
+                                            onClick={handleSearchChurch}
+                                            style={{ flex: 'none', padding: '10px 16px', background: 'var(--sba-text)', color: 'var(--sba-bg)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+                                        >
+                                            검색
+                                        </button>
+                                    </div>
+                                </FormField>
+
+                                {searchResults.length > 0 && (
+                                    <FormField>
+                                        <FormLabel>검색 결과 ({searchResults.length}건)</FormLabel>
+                                        <SearchResultList>
+                                            {searchResults.map(c => (
+                                                <SearchResultItem 
+                                                    key={c.id} 
+                                                    $selected={selectedChurch?.id === c.id}
+                                                    onClick={() => setSelectedChurch(c)}
+                                                >
+                                                    <span>{c.name}</span>
+                                                    <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-secondary)' }}>
+                                                        {c.invite_code ? '초대코드 필요' : '공개'}
+                                                    </span>
+                                                </SearchResultItem>
+                                            ))}
+                                        </SearchResultList>
+                                    </FormField>
+                                )}
+
+                                {selectedChurch && selectedChurch.invite_code && (
+                                    <FormField>
+                                        <FormLabel>초대 코드 (Invite Code)</FormLabel>
+                                        <FormInput 
+                                            type="password" 
+                                            placeholder="교회 관리자에게 받은 초대 코드를 입력해 주세요." 
+                                            value={inviteCode}
+                                            onChange={e => setInviteCode(e.target.value)}
+                                        />
+                                    </FormField>
+                                )}
+
+                                <ActionButton 
+                                    onClick={handleJoinChurch}
+                                    disabled={!selectedChurch || submitting}
+                                    style={{ marginTop: '12px' }}
+                                >
+                                    {submitting ? '가입 처리 중...' : selectedChurch ? `'${selectedChurch.name}' 가입하기` : '가입할 교회를 선택해 주세요'}
+                                </ActionButton>
+                            </>
+                        ) : (
+                            <>
+                                <FormField>
+                                    <FormLabel>교회 이름</FormLabel>
+                                    <FormInput 
+                                        type="text" 
+                                        placeholder="예: 서울북부교회" 
+                                        value={newChurchName}
+                                        onChange={e => setNewChurchName(e.target.value)}
+                                    />
+                                </FormField>
+
+                                <FormField>
+                                    <FormLabel>초대 코드 (선택)</FormLabel>
+                                    <FormInput 
+                                        type="text" 
+                                        placeholder="가입 시 필수로 요구할 비밀 코드를 입력하세요." 
+                                        value={newInviteCode}
+                                        onChange={e => setNewInviteCode(e.target.value)}
+                                    />
+                                </FormField>
+
+                                <FormField>
+                                    <FormLabel>교회 공개 여부</FormLabel>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            id="isPublic"
+                                            checked={newIsPublic} 
+                                            onChange={e => setNewIsPublic(e.target.checked)} 
+                                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                        />
+                                        <label htmlFor="isPublic" style={{ fontSize: '0.85rem', cursor: 'pointer' }}>교회 검색 목록에 노출합니다.</label>
+                                    </div>
+                                </FormField>
+
+                                <FormField>
+                                    <FormLabel>대표 테마 색상</FormLabel>
+                                    <ColorPresetGroup>
+                                        {colorPresets.map(color => (
+                                            <ColorCircle 
+                                                key={color} 
+                                                $color={color} 
+                                                $active={newThemeColor === color}
+                                                onClick={() => setNewThemeColor(color)}
+                                            />
+                                        ))}
+                                    </ColorPresetGroup>
+                                </FormField>
+
+                                <ActionButton 
+                                    onClick={handleCreateChurch}
+                                    disabled={!newChurchName.trim() || submitting}
+                                    style={{ marginTop: '12px' }}
+                                >
+                                    {submitting ? '교회 개설 중...' : '교회 개설하고 가입하기'}
+                                </ActionButton>
+                            </>
+                        )}
+                        
+                        <button 
+                            onClick={() => supabase.auth.signOut()}
+                            style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--sba-text-secondary)', fontSize: '0.8rem', marginTop: '16px', cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                            로그아웃 (다른 계정으로 로그인)
+                        </button>
+                    </OnboardingCard>
+                    
+                    {/* 토스트 팝업 렌더러 */}
+                    <div className="sba-toast-container">
+                        {toasts.map(t => (
+                            <div key={t.id} className="sba-toast">{t.message}</div>
+                        ))}
+                    </div>
+                </OnboardingOverlay>
+            </ThemeProvider>
+        );
+    }
+
+    // 3. 정상 접속 화면 (로그인 완료 + 소속 교회 존재)
     return (
-        <SbaStyledWrapper className={`sba-app-container ${isDark ? 'dark' : ''}`}>
+        <ThemeProvider theme={theme}>
+            <GlobalStyle />
+            <SbaStyledWrapper className={`sba-app-container ${isDark ? 'dark' : ''}`}>
         <GlobalStyle />
-            {isSplashVisible && (
-                <div className={`sba-splash-screen ${isSplashFading ? 'fade-out' : ''}`}>
-                    <div className="sba-splash-content">
-                        <h1 className="sba-splash-main-title">
-                            <DecryptedText text="서울북부교회" speed={15} maxIterations={4} />
-                        </h1>
-                        <h2 className="sba-splash-sub-title">
-                            <DecryptedText text="QT & 통독" speed={20} maxIterations={4} />
-                        </h2>
-                        <p className="sba-splash-desc">
-                            <DecryptedText text="말씀으로 하루를 여는 은혜의 시간" speed={20} maxIterations={4} />
-                        </p>
+                {isSplashVisible && (
+                    <div className={`sba-splash-screen ${isSplashFading ? 'fade-out' : ''}`}>
+                        <div className="sba-splash-content">
+                            <h1 className="sba-splash-main-title">
+                                <DecryptedText text={userChurch.name} speed={15} maxIterations={4} />
+                            </h1>
+                            <h2 className="sba-splash-sub-title">
+                                <DecryptedText text="QT & 통독" speed={20} maxIterations={4} />
+                            </h2>
+                            <p className="sba-splash-desc">
+                                <DecryptedText text="말씀으로 하루를 여는 은혜의 시간" speed={20} maxIterations={4} />
+                            </p>
+                        </div>
+                        <div className="sba-splash-footer">
+                            개발: leewish
+                        </div>
                     </div>
-                    <div className="sba-splash-footer">
-                        개발: leewish
-                    </div>
+                )}
+
+                <TopHeader 
+                    currentDate={effectiveDate} 
+                    setCurrentDate={setCurrentDate}
+                    onOpenCalendar={() => setShowCalendar(true)} 
+                    session={session}
+                    onOpenAuth={() => setShowAuth(true)}
+                    onOpenSettings={() => setShowSettings(true)}
+                    addToast={addToast}
+                />
+                
+                <main className="sba-content">
+                    {renderContent()}
+                    <AppFooter />
+                </main>
+
+                <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+                
+                <CalendarModal 
+                    isOpen={showCalendar} 
+                    onClose={() => setShowCalendar(false)} 
+                    currentDate={effectiveDate} 
+                    onSetDate={handleSetDate} 
+                    dailyPlans={dailyPlans}
+                />
+                
+                <SettingsModal 
+                    isOpen={showSettings} 
+                    onClose={() => setShowSettings(false)} 
+                    isDark={isDark}
+                    setIsDark={setIsDark}
+                    addToast={addToast}
+                    session={session}
+                    userChurch={userChurch}
+                    setUserChurch={setUserChurch}
+                    scheduleData={scheduleData}
+                    loadSchedule={loadSchedule}
+                />
+
+                <AuthModal
+                    isOpen={showAuth}
+                    onClose={() => setShowAuth(false)}
+                    addToast={addToast}
+                />
+
+                {/* 토스트 팝업 렌더러 */}
+                <div className="sba-toast-container">
+                    {toasts.map(t => (
+                        <div key={t.id} className="sba-toast">{t.message}</div>
+                    ))}
                 </div>
-            )}
-
-            <TopHeader 
-                currentDate={effectiveDate} 
-                setCurrentDate={setCurrentDate}
-                onOpenCalendar={() => setShowCalendar(true)} 
-                session={session}
-                onOpenAuth={() => setShowAuth(true)}
-                onOpenSettings={() => setShowSettings(true)}
-                addToast={addToast}
-            />
-            
-            <main className="sba-content">
-                {renderContent()}
-                <AppFooter />
-            </main>
-
-            <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
-            
-            <CalendarModal 
-                isOpen={showCalendar} 
-                onClose={() => setShowCalendar(false)} 
-                currentDate={effectiveDate} 
-                onSetDate={handleSetDate} 
-                dailyPlans={dailyPlans}
-            />
-            
-            <SettingsModal 
-                isOpen={showSettings} 
-                onClose={() => setShowSettings(false)} 
-                isDark={isDark}
-                setIsDark={setIsDark}
-                startDateStr={startDateStr} 
-                setStartDateStr={handleSetStartDateStr}
-                addToast={addToast}
-                session={session}
-            />
-
-            <AuthModal
-                isOpen={showAuth}
-                onClose={() => setShowAuth(false)}
-                addToast={addToast}
-            />
-
-            {/* 토스트 팝업 렌더러 */}
-            <div className="sba-toast-container">
-                {toasts.map(t => (
-                    <div key={t.id} className="sba-toast">{t.message}</div>
-                ))}
             </div>
-        </SbaStyledWrapper>
+        </ThemeProvider>
     );
 }
 

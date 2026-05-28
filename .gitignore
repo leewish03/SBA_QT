@@ -17,3 +17,4 @@ test-app/dist/
 # Sensitive Service Account Keys
 cbf-praylist-*.json
 **/cbf-praylist-*.json
+server.log
