@@ -394,6 +394,7 @@ export default function SBA_QT_App() {
     const [isSplashFading, setIsSplashFading] = useState(false);
 
     const colorPresets = ['#8B4513', '#556B2F', '#1A365D', '#2D3748', '#4A5568'];
+    const lastSyncedUserRef = React.useRef(null);
 
     // Toast 토스트 알림 추가 함수
     const addToast = (message) => {
@@ -444,11 +445,33 @@ export default function SBA_QT_App() {
         }
     };
 
-    // Supabase Auth 세션 감지
+    // 1. Supabase Auth 상태 감지 및 세션 바인딩
     useEffect(() => {
-        const syncAlarmSettingsFromMetadata = (sess) => {
-            if (sess && sess.user && sess.user.user_metadata) {
-                const meta = sess.user.user_metadata;
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+        });
+        return () => subscription.unsubscribe();
+    }, []);
+
+    // 2. 세션/사용자 ID 변화 시 정보 로드 및 1회 동기화 (중복 실행 완전 차단)
+    useEffect(() => {
+        if (!session) {
+            setUserChurch(null);
+            setCheckingChurch(false);
+            lastSyncedUserRef.current = null;
+            return;
+        }
+
+        const userId = session.user.id;
+        if (lastSyncedUserRef.current === userId) {
+            return; // 이미 이 사용자 ID로 동기화 완료됨
+        }
+        lastSyncedUserRef.current = userId;
+
+        const initUserSession = async () => {
+            // 알림 설정 동기화
+            if (session.user.user_metadata) {
+                const meta = session.user.user_metadata;
                 if (meta.sba_qt_alarm_enabled !== undefined) {
                     localStorage.setItem('sba_qt_alarm_enabled', String(meta.sba_qt_alarm_enabled));
                 }
@@ -456,43 +479,20 @@ export default function SBA_QT_App() {
                     localStorage.setItem('sba_qt_alarm_time', meta.sba_qt_alarm_time);
                 }
             }
+
+            // 소속 교회 정보 불러오기
+            await fetchUserChurch(userId);
+
+            // 로컬-클라우드 데이터 동기화
+            const res = await syncLocalDataToCloud();
+            if (res.success) {
+                addToast('소셜 클라우드와 북마크/메모가 동기화되었습니다.');
+                setBookmarkTrigger(prev => prev + 1);
+            }
         };
 
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            if (session) {
-                syncAlarmSettingsFromMetadata(session);
-                fetchUserChurch(session.user.id);
-                syncLocalDataToCloud().then((res) => {
-                    if (res.success) {
-                        addToast('소셜 클라우드와 북마크/메모가 동기화되었습니다.');
-                        setBookmarkTrigger(prev => prev + 1);
-                    }
-                });
-            } else {
-                setCheckingChurch(false);
-            }
-        });
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-            if (session) {
-                syncAlarmSettingsFromMetadata(session);
-                fetchUserChurch(session.user.id);
-                syncLocalDataToCloud().then((res) => {
-                    if (res.success) {
-                        addToast('소셜 클라우드와 북마크/메모가 동기화되었습니다.');
-                        setBookmarkTrigger(prev => prev + 1);
-                    }
-                });
-            } else {
-                setUserChurch(null);
-                setCheckingChurch(false);
-            }
-        });
-
-        return () => subscription.unsubscribe();
-    }, []);
+        initUserSession();
+    }, [session]);
 
     // 브라우저 알림 스케줄러 구동
     useEffect(() => {
