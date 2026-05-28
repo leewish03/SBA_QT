@@ -133,8 +133,8 @@ async function runCapture(url, prefix) {
 }
 
 (async () => {
-  // Capture on local port 5174 and live production site
-  const localRes = await runCapture('http://localhost:5174/', 'local');
+  // Capture on local port 3000 and live production site
+  const localRes = await runCapture('http://localhost:3000/', 'local');
   const liveRes = await runCapture('https://sba-qt.onrender.com/', 'live');
   
   console.log('\n--- VERIFICATION SUMMARY ---');

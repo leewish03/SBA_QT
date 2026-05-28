@@ -42,8 +42,8 @@ function generateUUID() {
 
     try {
         // 1. Splash & Guest Onboarding
-        console.log('1. Navigating to http://localhost:5173/...');
-        await page.goto('http://localhost:5173/', { waitUntil: 'networkidle2' });
+        console.log('1. Navigating to http://localhost:3000/...');
+        await page.goto('http://localhost:3000/', { waitUntil: 'networkidle2' });
         
         console.log('Waiting for splash screen...');
         await delay(3500); // Wait for splash to disappear
@@ -84,11 +84,23 @@ function generateUUID() {
                 expires_at: Math.floor(Date.now() / 1000) + 3600
             };
             localStorage.setItem('sb-ebfpjvwwbognddixrvyc-auth-token', JSON.stringify(session));
+            localStorage.setItem('sb-localhost-auth-token', JSON.stringify(session));
+            localStorage.setItem('sb-localhost-3000-auth-token', JSON.stringify(session));
+            localStorage.setItem('sb-127.0.0.1-auth-token', JSON.stringify(session));
         }, testUuid);
 
         console.log('Reloading page to apply mock session...');
         await page.reload({ waitUntil: 'networkidle2' });
         await delay(3500); // Wait for splash again
+
+        // Debug: print localStorage keys and session
+        const lsKeys = await page.evaluate(() => {
+            return {
+                keys: Object.keys(localStorage),
+                session: localStorage.getItem('sb-localhost-auth-token') ? 'FOUND_LOCALHOST' : 'NOT_FOUND_LOCALHOST'
+            };
+        });
+        console.log('localStorage status after reload:', lsKeys);
 
         await page.screenshot({ path: path.join(scratchDir, 'qa_2_onboarding_join_create.png') });
         console.log('Saved: qa_2_onboarding_join_create.png');
@@ -186,7 +198,7 @@ function generateUUID() {
         await page.evaluate(() => {
             // Find tab button by text or index.
             const btns = Array.from(document.querySelectorAll('button'));
-            const genBtn = btns.find(b => b.textContent.includes('일정 대량 생성'));
+            const genBtn = btns.find(b => b.textContent.includes('일정 자동 생성기'));
             if (genBtn) genBtn.click();
         });
         await delay(800);
@@ -204,28 +216,33 @@ function generateUUID() {
                 selects[1].dispatchEvent(new Event('change', { bubbles: true }));
             }
             
-            const inputs = Array.from(document.querySelectorAll('input'));
-            // Let's modify End Chap to 2 for short test
-            const endChapInput = inputs.find(i => i.value === '22'); // default end chap of REV or 28 MAT?
-            // Actually let's locate input elements for chap
-            // We can just query by placeholder or labels
+            // 종료 장을 2장으로 설정하기 위해 종료 장 인풋을 찾습니다.
+            const divs = Array.from(document.querySelectorAll('div'));
+            const endChapDiv = divs.find(d => d.innerText && d.innerText.includes('종료 장') && !d.innerText.includes('종료 성경'));
+            if (endChapDiv) {
+                const input = endChapDiv.querySelector('input');
+                if (input) {
+                    input.value = '2';
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }
         });
         
         await page.screenshot({ path: path.join(scratchDir, 'qa_5_settings_admin_tab.png') });
         console.log('Saved: qa_5_settings_admin_tab.png');
 
-        // Click Generate Bulk Schedules
-        console.log('Triggering bulk schedule generation...');
-        await page.evaluate(() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            const genSubmitBtn = btns.find(b => b.textContent.includes('계산 및 업로드'));
-            if (genSubmitBtn) genSubmitBtn.click();
-        });
-        
         // Handle dialog alert if any
         page.on('dialog', async dialog => {
             console.log('Accepting dialog:', dialog.message());
             await dialog.accept();
+        });
+
+        // Click Generate Bulk Schedules
+        console.log('Triggering bulk schedule generation...');
+        await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const genSubmitBtn = btns.find(b => b.textContent.includes('자동 생성 및 덮어쓰기'));
+            if (genSubmitBtn) genSubmitBtn.click();
         });
         
         await delay(4000); // Wait for API bulk process
@@ -242,7 +259,7 @@ function generateUUID() {
         console.log('Switching to Admin Schedule Manual Edit tab...');
         await page.evaluate(() => {
             const btns = Array.from(document.querySelectorAll('button'));
-            const editBtn = btns.find(b => b.textContent.includes('일정 개별 수정'));
+            const editBtn = btns.find(b => b.textContent.includes('일정 달력 수동 수정'));
             if (editBtn) editBtn.click();
         });
         await delay(800);
@@ -250,24 +267,36 @@ function generateUUID() {
         // Fill manual edit form
         console.log('Filling manual schedule edit form...');
         await page.evaluate(() => {
-            const inputs = Array.from(document.querySelectorAll('input'));
-            // editQtBook, editQtTitle, editReadingBook etc
-            const qtBookInput = inputs.find(i => i.placeholder === '예: MAT');
-            if (qtBookInput) {
-                qtBookInput.value = 'MAT';
-                qtBookInput.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            
-            const qtTitleInput = inputs.find(i => i.placeholder === '묵상 본문 제목');
-            if (qtTitleInput) {
-                qtTitleInput.value = '그리스도의 계보';
-                qtTitleInput.dispatchEvent(new Event('input', { bubbles: true }));
+            // 1. 날짜 설정 (수정할 날짜 선택)
+            const dateInput = document.querySelector('input[type="date"]');
+            if (dateInput) {
+                const now = new Date();
+                const y = now.getFullYear();
+                const m = String(now.getMonth() + 1).padStart(2, '0');
+                const d = String(now.getDate()).padStart(2, '0');
+                const dateStr = `${y}-${m}-${d}`;
+                dateInput.value = dateStr;
+                dateInput.dispatchEvent(new Event('input', { bubbles: true }));
+                dateInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
 
-            const rdBookInput = inputs.find(i => i.placeholder === '예: GEN');
-            if (rdBookInput) {
-                rdBookInput.value = 'GEN';
-                rdBookInput.dispatchEvent(new Event('input', { bubbles: true }));
+            // 2. 묵상/통독 성경 권 select
+            const selects = Array.from(document.querySelectorAll('select'));
+            if (selects.length >= 2) {
+                // 묵상 성경 권
+                selects[0].value = 'MAT';
+                selects[0].dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // 통독 성경 권
+                selects[1].value = 'GEN';
+                selects[1].dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            // 3. 묵상 본문 제목 input
+            const titleInput = document.querySelector('input[placeholder*="말씀으로"]');
+            if (titleInput) {
+                titleInput.value = '그리스도의 계보';
+                titleInput.dispatchEvent(new Event('input', { bubbles: true }));
             }
         });
         await delay(500);
@@ -279,7 +308,7 @@ function generateUUID() {
         console.log('Saving manual schedule...');
         await page.evaluate(() => {
             const btns = Array.from(document.querySelectorAll('button'));
-            const saveBtn = btns.find(b => b.textContent.includes('일정 저장'));
+            const saveBtn = btns.find(b => b.textContent.includes('일정 저장하기'));
             if (saveBtn) saveBtn.click();
         });
         await delay(3000); // Wait for API update

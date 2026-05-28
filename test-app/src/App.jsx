@@ -447,6 +447,11 @@ export default function App() {
 
     // 1. Supabase Auth 상태 감지 및 세션 바인딩
     useEffect(() => {
+        // 로컬스토리지 세션 즉시 복구 (E2E Mock 등 대응)
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) setSession(session);
+        });
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
         });
