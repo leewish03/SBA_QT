@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { calcQtDays, getEffectiveDate, SHORT_TO_FULL, safeToISODateString } from '../utils/bibleLogic';
+import { calcQtDays, getEffectiveDate, SHORT_TO_FULL, safeToISODateString, BIBLE_BOOKS } from '../utils/bibleLogic';
 import { supabase } from '../utils/supabaseClient';
 import { SpotlightCard } from './ReactBits';
 

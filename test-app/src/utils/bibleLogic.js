@@ -23,6 +23,11 @@ export const SHORT_TO_FULL = Object.fromEntries(
     Object.entries(FULL_TO_SHORT).map(([full, short]) => [short, full])
 );
 
+export const BIBLE_BOOKS = Object.entries(FULL_TO_SHORT).map(([full, short]) => ({
+    eng: KOR_TO_ENG[short],
+    kor: full
+})).filter(b => b.eng); // KOR_TO_ENG에 매핑되지 않은 경우 대비
+
 export const DAYS_ARR = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
 
 export function getMidnightKST(dateObj) {
