@@ -7,6 +7,77 @@ import { supabase } from '../utils/supabaseClient';
 import { ShinyText, SpotlightCard } from './ReactBits';
 
 // ==========================================
+// 0. 말씀 뷰어 관련 styled-components
+// ==========================================
+const VerseTitle = styled.h2`
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--sba-verse-title);
+  margin-bottom: 24px;
+  margin-top: 10px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--sba-border-strong);
+  text-align: left;
+`;
+
+const VerseContainer = styled.div`
+  font-family: 'Noto Serif KR', serif;
+`;
+
+const VerseBlock = styled.div`
+  margin-bottom: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  line-height: 1.9;
+  letter-spacing: -0.02em;
+  font-family: 'Noto Serif KR', serif;
+  color: var(--sba-verse-text);
+  font-size: var(--sba-bible-font-size, 1.1rem);
+  text-align: left; 
+  word-break: break-all;
+  display: flex;
+  align-items: flex-start;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+
+  &:hover {
+    background-color: var(--sba-card-active);
+  }
+  
+  &.highlighted {
+    background-color: var(--sba-highlight);
+    &:hover {
+      background-color: var(--sba-highlight-hover);
+    }
+  }
+  
+  &.focused {
+    background-color: var(--sba-card-active);
+    &.highlighted {
+      background-color: var(--sba-highlight-hover);
+    }
+  }
+`;
+
+const VerseNumber = styled.div`
+  font-weight: 700;
+  color: var(--sba-verse-num);
+  font-size: 0.75em;
+  margin-right: 8px;
+  margin-top: 0.35em;
+  min-width: 1.2em;
+  text-align: right;
+  user-select: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+`;
+
+const VerseText = styled.div`
+  flex: 1;
+`;
+
+// ==========================================
 // 1. 메모(QT 노트) 에디터 컴포넌트 스타일 및 컴포넌트
 // ==========================================
 const DrawerOverlay = styled.div`
@@ -601,26 +672,26 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
 
   return (
     <>
-      <h2 className="sba-verse-title">{fullName} {chapter}장</h2>
-      <div className="serif-text sba-verse-container">
+      <VerseTitle>{fullName} {chapter}장</VerseTitle>
+      <VerseContainer className="serif-text">
         {Object.entries(verses).map(([vNum, text]) => {
           const bookmarked = isBookmarked(vNum);
           const isFocused = !!selectedVerses[vNum];
           const elementId = `verse-${book}-${chapter}-${vNum}`;
 
           return (
-            <div 
+            <VerseBlock 
               id={elementId}
               key={vNum}
-              className={`sba-verse-block ${bookmarked ? 'highlighted' : ''} ${isFocused ? 'focused' : ''}`}
+              className={`${bookmarked ? 'highlighted' : ''} ${isFocused ? 'focused' : ''}`}
               onClick={() => handleVerseClick(vNum, text)}
             >
-              <div className="sba-verse-number">{vNum}</div>
-              <div className="sba-verse-text">{text}</div>
-            </div>
+              <VerseNumber>{vNum}</VerseNumber>
+              <VerseText>{text}</VerseText>
+            </VerseBlock>
           );
         })}
-      </div>
+      </VerseContainer>
 
       {selectedCount > 0 && (
         <FloatingBar className="sba-floating-bar">
@@ -1748,7 +1819,7 @@ const SharingCard = styled.div`
   margin-bottom: 20px;
 `;
 
-export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
+export function SharingTab({ session, onOpenAuthModal, addToast, isDark, userChurch }) {
   const [reflections, setReflections] = useState([]);
   const [comments, setComments] = useState({}); // { reflectionId: [] }
   const [likes, setLikes] = useState({}); // { reflectionId: { count: 0, liked: false } }
@@ -1760,7 +1831,7 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const [newCommentText, setNewCommentText] = useState({}); // { reflectionId: '' }
   const [isBookmarkSelectOpen, setIsBookmarkSelectOpen] = useState(false);
 
-  const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
+  const isAdmin = userChurch?.role === 'admin' || session?.user?.email === 'lekas1217@gmail.com';
 
   const getTodayDateStr = () => {
     return safeToISODateString(getEffectiveDate());
@@ -1769,11 +1840,13 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
   const todayStr = getTodayDateStr();
 
   const loadReflections = async () => {
+    if (!userChurch) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('qt_shared_reflections')
         .select('*')
+        .eq('church_id', userChurch.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -1830,7 +1903,7 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
 
   useEffect(() => {
     loadReflections();
-  }, [session]);
+  }, [session, userChurch]);
 
   const handleImportMemo = () => {
     if (!session) {
@@ -1872,6 +1945,10 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
       onOpenAuthModal();
       return;
     }
+    if (!userChurch) {
+      addToast('소속된 교회가 없습니다.');
+      return;
+    }
     if (!content.trim()) {
       alert('묵상 내용을 입력해 주세요.');
       return;
@@ -1888,6 +1965,7 @@ export function SharingTab({ session, onOpenAuthModal, addToast, isDark }) {
         .from('qt_shared_reflections')
         .insert({
           user_id: session.user.id,
+          church_id: userChurch.id,
           author_name: authorName,
           author_email: session.user.email,
           target_date: todayStr,
@@ -2348,7 +2426,7 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
   };
 
   return (
-    <div className="sba-modal-overlay" onClick={onClose} style={{ zIndex: 130 }}>
+    <DetailModalOverlay onClick={onClose} style={{ zIndex: 130 }}>
       {/* SVG 노이즈 필터 정의 */}
       <svg style={{ display: 'none' }}>
         <filter id="card-paper-noise">
@@ -2359,7 +2437,7 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
         </filter>
       </svg>
 
-      <div className="sba-modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '420px', padding: '20px'}}>
+      <DetailModalContent onClick={e => e.stopPropagation()} style={{maxWidth: '420px', padding: '20px'}}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h3 style={{marginTop: 0, marginBottom: 0, fontSize: '1rem', fontWeight: 'bold'}}>말씀 카드 제작</h3>
           <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--sba-text-muted)' }} onClick={onClose}>✕</button>
@@ -2504,16 +2582,16 @@ export function ImageCardModal({ isOpen, onClose, passage, verses }) {
 
         {/* 하단 버튼 */}
         <div style={{display: 'flex', gap: '8px', marginTop: '20px'}}>
-          <button className="sba-btn" style={{flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleShare}>
+          <SolidButton style={{flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleShare}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             공유
-          </button>
-          <button className="sba-btn" style={{flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'var(--sba-card-sub-bg)', color: 'var(--sba-text)', border: '1px solid var(--sba-border-strong)'}} onClick={handleDownload}>
+          </SolidButton>
+          <OutlinedButton style={{flex: 1, padding: '10px 16px', fontSize: '0.875rem', marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'var(--sba-card-sub-bg)'}} onClick={handleDownload}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             저장
-          </button>
+          </OutlinedButton>
         </div>
-      </div>
-    </div>
+      </DetailModalContent>
+    </DetailModalOverlay>
   );
 }

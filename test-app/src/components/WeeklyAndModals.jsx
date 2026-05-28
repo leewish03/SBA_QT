@@ -21,7 +21,7 @@ const ModalOverlay = styled.div`
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background-color: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
   z-index: 100;
   display: flex;
   align-items: center;
@@ -200,7 +200,13 @@ export function TabWeekly({ dailyPlans, currentDate, onCardClick }) {
                             <div className="sba-weekly-card-header">
                                 <span>[{plan.dayName[0]}] {dKey}</span>
                                 <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
-                                    {hasNote && <span title="메모 작성됨" style={{fontSize:'0.9rem'}}>✏️</span>}
+                                    {hasNote && (
+                                        <span title="메모 작성됨" style={{ display: 'flex', alignItems: 'center' }}>
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--sba-text-secondary)' }}>
+                                                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                                            </svg>
+                                        </span>
+                                    )}
                                     {isRealToday && <span style={{fontSize:'0.75rem', background:'var(--sba-text)', color:'var(--sba-bg)', padding:'2px 8px', borderRadius:'12px'}}>오늘</span>}
                                     {isSelected && !isRealToday && <span style={{fontSize:'0.75rem', background:'var(--sba-text-secondary)', color:'var(--sba-bg)', padding:'2px 8px', borderRadius:'12px'}}>선택됨</span>}
                                 </div>
@@ -300,44 +306,40 @@ const SettingControl = styled.div`
 
 const SwitchContainer = styled.label`
   position: relative;
-  display: inline-block;
-  width: 48px;
+  display: inline-flex;
+  align-items: center;
+  width: 44px;
   height: 24px;
+  cursor: pointer;
+  user-select: none;
 `;
 
 const SwitchInput = styled.input`
   opacity: 0;
   width: 0;
   height: 0;
-  
-  &:checked + span {
-    background-color: var(--sba-text);
-  }
-  
-  &:checked + span:before {
-    transform: translateX(24px);
-    background-color: var(--sba-bg);
-  }
 `;
 
 const SwitchSlider = styled.span`
   position: absolute;
-  cursor: pointer;
   top: 0; left: 0; right: 0; bottom: 0;
-  background-color: var(--sba-border-strong);
-  transition: .2s;
-  border-radius: 24px;
+  background-color: ${props => props.$checked ? 'var(--sba-text)' : 'var(--sba-border-strong)'};
+  border: 1px solid ${props => props.$checked ? 'var(--sba-text)' : 'var(--sba-border-strong)'};
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  border-radius: 9999px;
   
   &:before {
     position: absolute;
     content: "";
     height: 18px;
     width: 18px;
-    left: 3px;
-    bottom: 3px;
-    background-color: var(--sba-text);
-    transition: .2s;
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--sba-bg);
     border-radius: 50%;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: ${props => props.$checked ? 'translateX(20px)' : 'translateX(0)'};
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 `;
 
@@ -363,10 +365,9 @@ const FontSizeVal = styled.span`
   text-align: center;
 `;
 
-export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr, setStartDateStr, addToast, session }) {
-    const [token, setToken] = useState('sba_qt_admin_secret_token');
+export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, session, userChurch, setUserChurch, scheduleData, loadSchedule }) {
+    const [activeSubTab, setActiveSubTab] = useState('settings'); // 'settings' | 'admin_generate' | 'admin_edit'
     const [syncing, setSyncing] = useState(false);
-    const [refls, setRefls] = useState([]);
     const [stats, setStats] = useState({ bookmarks: 0, notes: 0 });
     const [fontSize, setFontSize] = useState(() => {
         const saved = localStorage.getItem('sba_bible_font_size');
@@ -380,25 +381,45 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
     const [alarmTime, setAlarmTime] = useState(() => {
         return localStorage.getItem('sba_qt_alarm_time') || '08:00';
     });
+    const [isTesting, setIsTesting] = useState(false);
 
     const [alarmHour, alarmMinute] = alarmTime.split(':');
 
-    // 세션이 유효할 때 클라우드 메타데이터가 변경되면 알림 상태 동기화
-    useEffect(() => {
-        if (session && session.user && session.user.user_metadata) {
-            const meta = session.user.user_metadata;
-            if (meta.sba_qt_alarm_enabled !== undefined) {
-                setAlarmEnabled(meta.sba_qt_alarm_enabled);
-                localStorage.setItem('sba_qt_alarm_enabled', String(meta.sba_qt_alarm_enabled));
-            }
-            if (meta.sba_qt_alarm_time) {
-                setAlarmTime(meta.sba_qt_alarm_time);
-                localStorage.setItem('sba_qt_alarm_time', meta.sba_qt_alarm_time);
-            }
-        }
-    }, [session]);
+    // 1. 일정 자동 생성용 상태
+    const [genStartDate, setGenStartDate] = useState(safeToISODateString(getEffectiveDate()));
+    const [genStartBook, setGenStartBook] = useState('GEN');
+    const [genStartChap, setGenStartChap] = useState(1);
+    const [genEndBook, setGenEndBook] = useState('REV');
+    const [genEndChap, setGenEndChap] = useState(22);
+    const [genPagesPerDay, setGenPagesPerDay] = useState(1);
+    const [genExcludeDays, setGenExcludeDays] = useState([0]); // 기본 일요일 제외
 
-    const isAdmin = session?.user?.email === 'lekas1217@gmail.com';
+    // 2. 일정 수동 수정용 상태
+    const [editDate, setEditDate] = useState(safeToISODateString(getEffectiveDate()));
+    const [editQtBook, setEditQtBook] = useState('');
+    const [editQtStartChap, setEditQtStartChap] = useState(1);
+    const [editQtStartVerse, setEditQtStartVerse] = useState(1);
+    const [editQtEndChap, setEditQtEndChap] = useState(1);
+    const [editQtEndVerse, setEditQtEndVerse] = useState(30);
+    const [editQtTitle, setEditQtTitle] = useState('');
+    const [editReadingBook, setEditReadingBook] = useState('');
+    const [editReadingStartChap, setEditReadingStartChap] = useState(1);
+    const [editReadingEndChap, setEditReadingEndChap] = useState(1);
+
+    const urlBase64ToUint8Array = (base64String) => {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding)
+            .replace(/\-/g, '+')
+            .replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    };
+
+    const isAdmin = userChurch?.role === 'admin';
 
     const changeFontSize = (delta) => {
         setFontSize(prev => {
@@ -407,22 +428,6 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
             document.documentElement.style.setProperty('--sba-bible-font-size', `${next.toFixed(1)}px`);
             return next;
         });
-    };
-
-    const loadRefls = async () => {
-        if (!isAdmin) return;
-        try {
-            const { data, error } = await supabase
-                .from('qt_shared_reflections')
-                .select('id, author_name, passage, created_at')
-                .order('created_at', { ascending: false })
-                .limit(20);
-            if (!error && data) {
-                setRefls(data);
-            }
-        } catch (e) {
-            console.error(e);
-        }
     };
 
     const loadStats = () => {
@@ -438,116 +443,302 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
         }
     };
 
+    const checkPushSubscriptionStatus = async () => {
+        if (!('serviceWorker' in navigator)) return;
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            const sub = await reg.pushManager.getSubscription();
+            if (sub) {
+                setAlarmEnabled(true);
+                localStorage.setItem('sba_qt_alarm_enabled', 'true');
+                if (session) {
+                    const { data, error } = await supabase
+                        .from('qt_push_subscriptions')
+                        .select('alarm_time')
+                        .eq('endpoint', sub.endpoint)
+                        .maybeSingle();
+                    if (!error && data) {
+                        setAlarmTime(data.alarm_time);
+                        localStorage.setItem('sba_qt_alarm_time', data.alarm_time);
+                    }
+                }
+            } else {
+                setAlarmEnabled(false);
+                localStorage.setItem('sba_qt_alarm_enabled', 'false');
+            }
+        } catch (e) {
+            console.error('푸시 상태 감지 실패:', e);
+        }
+    };
+
     useEffect(() => {
         if (isOpen) {
-            loadRefls();
             loadStats();
+            setActiveSubTab('settings');
+            if (session) {
+                checkPushSubscriptionStatus();
+            }
         }
     }, [isOpen, session]);
 
-    if (!isOpen) return null;
+    // 날짜 변경 시 해당 날짜의 일정을 찾아서 수동 폼 채우기
+    useEffect(() => {
+        if (scheduleData && editDate) {
+            const row = scheduleData.find(s => s.date === editDate);
+            if (row) {
+                setEditQtBook(row.qt_book || '');
+                setEditQtStartChap(row.qt_start_chap || 1);
+                setEditQtStartVerse(row.qt_start_verse || 1);
+                setEditQtEndChap(row.qt_end_chap || 1);
+                setEditQtEndVerse(row.qt_end_verse || 30);
+                setEditQtTitle(row.qt_title || '');
+                setEditReadingBook(row.reading_book || '');
+                setEditReadingStartChap(row.reading_start_chap || 1);
+                setEditReadingEndChap(row.reading_end_chap || 1);
+            } else {
+                setEditQtBook('');
+                setEditQtStartChap(1);
+                setEditQtStartVerse(1);
+                setEditQtEndChap(1);
+                setEditQtEndVerse(30);
+                setEditQtTitle('');
+                setEditReadingBook('');
+                setEditReadingStartChap(1);
+                setEditReadingEndChap(1);
+            }
+        }
+    }, [editDate, scheduleData]);
 
     const handleAlarmToggle = async (e) => {
         const checked = e.target.checked;
+        if (!('serviceWorker' in navigator)) {
+            alert('이 브라우저는 웹 알림 기능을 지원하지 않습니다.');
+            return;
+        }
+
         if (checked) {
-            if (!('Notification' in window)) {
-                alert('이 브라우저는 알림 기능을 지원하지 않습니다.');
-                return;
-            }
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') {
-                alert('알림 권한이 거부되었습니다. 브라우저 설정에서 알림 권한을 허용해 주세요.');
-                return;
-            }
-        }
-        
-        setAlarmEnabled(checked);
-        localStorage.setItem('sba_qt_alarm_enabled', checked ? 'true' : 'false');
-        
-        if (session) {
-            await supabase.auth.updateUser({
-                data: {
-                    sba_qt_alarm_enabled: checked,
-                    sba_qt_alarm_time: alarmTime
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    alert('알림 권한이 거부되었습니다. 브라우저 설정에서 알림 권한을 허용해 주세요.');
+                    return;
                 }
-            });
+
+                const reg = await navigator.serviceWorker.ready;
+                const publicVapidKey = 'BBRULQ6u9snBnV2LAfyu410fLl9Hhcc9VyE70wkgeEdeYjYCewDSPJ_t19oK_AzVtLDVBUYNc8YjuVb-B5sx8TQ';
+                const subscription = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+                });
+
+                const subJson = subscription.toJSON();
+                const p256dh = subJson.keys?.p256dh || '';
+                const auth = subJson.keys?.auth || '';
+
+                const { error } = await supabase
+                    .from('qt_push_subscriptions')
+                    .upsert({
+                        user_id: session ? session.user.id : null,
+                        endpoint: subscription.endpoint,
+                        p256dh: p256dh,
+                        auth: auth,
+                        alarm_time: alarmTime,
+                        church_id: userChurch?.id,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'endpoint' });
+
+                if (error) throw error;
+
+                setAlarmEnabled(true);
+                localStorage.setItem('sba_qt_alarm_enabled', 'true');
+                addToast('브라우저 푸시 알림이 활성화되었습니다.');
+            } catch (err) {
+                console.error('푸시 구독 실패:', err);
+                alert('푸시 알림 활성화 도중 오류가 발생했습니다: ' + err.message);
+            }
+        } else {
+            try {
+                const reg = await navigator.serviceWorker.ready;
+                const sub = await reg.pushManager.getSubscription();
+                if (sub) {
+                    await sub.unsubscribe();
+                    await supabase
+                        .from('qt_push_subscriptions')
+                        .delete()
+                        .eq('endpoint', sub.endpoint);
+                }
+                setAlarmEnabled(false);
+                localStorage.setItem('sba_qt_alarm_enabled', 'false');
+                addToast('브라우저 푸시 알림이 비활성화되었습니다.');
+            } catch (err) {
+                console.error('푸시 해제 실패:', err);
+            }
         }
-        addToast(checked ? '매일 QT 알림이 켜졌습니다.' : '매일 QT 알림이 꺼졌습니다.');
     };
 
     const handleAlarmTimeChange = async (h, m) => {
         const newTime = `${h}:${m}`;
         setAlarmTime(newTime);
         localStorage.setItem('sba_qt_alarm_time', newTime);
-        
-        if (session) {
-            await supabase.auth.updateUser({
-                data: {
-                    sba_qt_alarm_enabled: alarmEnabled,
-                    sba_qt_alarm_time: newTime
+
+        if ('serviceWorker' in navigator) {
+            try {
+                const reg = await navigator.serviceWorker.ready;
+                const sub = await reg.pushManager.getSubscription();
+                if (sub) {
+                    const { error } = await supabase
+                        .from('qt_push_subscriptions')
+                        .update({ alarm_time: newTime })
+                        .eq('endpoint', sub.endpoint);
+                    if (error) throw error;
                 }
-            });
+            } catch (e) {
+                console.error('알림 시간 클라우드 동기화 실패:', e);
+            }
         }
-        addToast(`알림 시간이 ${h}시 ${m}분으로 변경되었습니다.`);
+        addToast(`브라우저 알림 시간이 ${h}시 ${m}분으로 변경되었습니다.`);
     };
 
-    const handleSync = async () => {
-        setSyncing(true);
+    const handleTestNotification = async () => {
+        setIsTesting(true);
         try {
-            const res = await fetch(`/api/sba-qt?purge=true&token=${token}`);
+            const reg = ('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null;
+            const sub = reg ? await reg.pushManager.getSubscription() : null;
+            if (!sub) {
+                alert('브라우저 알림 수신이 활성화되어 있어야 테스트가 가능합니다.');
+                return;
+            }
+            
+            const reqBody = {
+                user_id: session ? session.user.id : null,
+                endpoint: sub.endpoint,
+                test: true
+            };
+
+            const res = await fetch('https://ebfpjvwwbognddixrvyc.supabase.co/functions/v1/send-daily-push', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token || ''}`
+                },
+                body: JSON.stringify(reqBody)
+            });
+
             if (res.ok) {
-                addToast('구글 스프레드시트 데이터가 즉시 강제 갱신(Purge)되었습니다.');
+                addToast('테스트 알림 요청이 전송되었습니다. 잠시 후 기기를 확인해 주세요.');
+            } else {
+                const errText = await res.text();
+                throw new Error(errText || 'Edge Function 응답 실패');
+            }
+        } catch (err) {
+            console.error('테스트 알림 오류:', err);
+            alert('테스트 알림 전송에 실패했습니다: ' + err.message);
+        } finally {
+            setIsTesting(false);
+        }
+    };
+
+    const handleLeaveChurch = async () => {
+        if (!window.confirm(`정말로 '${userChurch?.name}' 교회에서 탈퇴하시겠습니까?`)) return;
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+            const res = await fetch('/api/churches/leave', {
+                method: 'POST',
+                headers
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                addToast('교회에서 탈퇴 처리되었습니다.');
+                setUserChurch(null);
                 onClose();
             } else {
-                let errorMsg = '알 수 없는 오류';
-                const contentType = res.headers.get('content-type') || '';
-                
-                if (contentType.includes('application/json')) {
-                    try {
-                        const errData = await res.json();
-                        errorMsg = errData.error || errData.message || JSON.stringify(errData);
-                    } catch (parseErr) {
-                        console.error('JSON parsing failed:', parseErr);
-                    }
-                } else {
-                    try {
-                        const textData = await res.text();
-                        errorMsg = textData || `상태 코드: ${res.status}`;
-                    } catch (parseErr) {
-                        console.error('Text parsing failed:', parseErr);
-                    }
-                }
-                
-                if (res.status === 401) {
-                    alert(`동기화 실패 (401 Unauthorized): 입력하신 관리자 토큰이 올바르지 않거나 만료되었습니다. 토큰 값을 다시 확인해 주세요.\n(상세 에러: ${errorMsg})`);
-                } else if (res.status === 403) {
-                    alert(`동기화 실패 (403 Forbidden): 이 요청을 수행할 권한이 없습니다.\n(상세 에러: ${errorMsg})`);
-                } else if (res.status === 500) {
-                    alert(`동기화 실패 (500 Internal Server Error): 서버 내부 오류가 발생했습니다. 구글 시트 API 연동을 확인해 주세요.\n(상세 에러: ${errorMsg})`);
-                } else {
-                    alert(`동기화 실패 (상태 코드 ${res.status}): ${errorMsg}`);
-                }
+                throw new Error(data.error || '탈퇴 실패');
             }
-        } catch (e) {
-            console.error(e);
-            alert('API 호출 도중 오류가 발생했습니다. 네트워크 연결 상태를 확인해 주세요.');
+        } catch (err) {
+            alert('교회 탈퇴 중 오류가 발생했습니다: ' + err.message);
+        }
+    };
+
+    // 관리자 일정 자동 생성 요청
+    const handleGenerateSchedule = async () => {
+        if (!window.confirm('기존 일정이 있는 날짜는 덮어씌워집니다. 계속하시겠습니까?')) return;
+        setSyncing(true);
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+            const res = await fetch('/api/qt-schedule/generate', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    church_id: userChurch.id,
+                    start_date: genStartDate,
+                    start_book: genStartBook,
+                    start_chap: genStartChap,
+                    end_book: genEndBook,
+                    end_chap: genEndChap,
+                    pages_per_day: genPagesPerDay,
+                    exclude_days: genExcludeDays
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                addToast(data.message);
+                if (loadSchedule) loadSchedule();
+                setActiveSubTab('settings');
+            } else {
+                throw new Error(data.error || '생성 실패');
+            }
+        } catch (err) {
+            alert('일정 자동 생성 실패: ' + err.message);
         } finally {
             setSyncing(false);
         }
     };
 
-    const handleDeleteRefl = async (id) => {
-        if (!window.confirm('해당 묵상 공유글을 삭제하시겠습니까?')) return;
+    // 관리자 일정 수동 단일 저장 요청
+    const handleUpdateSchedule = async () => {
+        setSyncing(true);
         try {
-            const { error } = await supabase
-                .from('qt_shared_reflections')
-                .delete()
-                .eq('id', id);
-            if (error) throw error;
-            addToast('묵상 공유글이 삭제되었습니다.');
-            loadRefls();
+            const headers = { 'Content-Type': 'application/json' };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+            const existing = scheduleData?.find(s => s.date === editDate);
+            const res = await fetch('/api/qt-schedule/update', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    id: existing?.id || null,
+                    church_id: userChurch.id,
+                    date: editDate,
+                    qt_book: editQtBook || null,
+                    qt_start_chap: editQtStartChap || null,
+                    qt_start_verse: editQtStartVerse || null,
+                    qt_end_chap: editQtEndChap || null,
+                    qt_end_verse: editQtEndVerse || null,
+                    qt_title: editQtTitle || null,
+                    reading_book: editReadingBook || null,
+                    reading_start_chap: editReadingStartChap || null,
+                    reading_end_chap: editReadingEndChap || null
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                addToast('일정이 성공적으로 저장되었습니다.');
+                if (loadSchedule) loadSchedule();
+                setActiveSubTab('settings');
+            } else {
+                throw new Error(data.error || '저장 실패');
+            }
         } catch (err) {
-            alert('삭제 실패: ' + err.message);
+            alert('일정 저장 실패: ' + err.message);
+        } finally {
+            setSyncing(false);
         }
     };
 
@@ -566,161 +757,390 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, startDateStr
     return (
         <ModalOverlay onClick={onClose}>
             <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '95%' }}>
-                <ModalHeader>
-                    <ModalTitle>설정 (Settings)</ModalTitle>
-                    <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
-                </ModalHeader>
-                
-                {/* 다크모드 설정 */}
-                <SettingRow>
-                    <SettingLabel>다크 테마 (Dark Mode)</SettingLabel>
-                    <SettingControl>
-                        <SwitchContainer>
-                            <SwitchInput 
-                                type="checkbox" 
-                                checked={isDark} 
-                                onChange={e => setIsDark(e.target.checked)} 
-                            />
-                            <SwitchSlider />
-                        </SwitchContainer>
-                    </SettingControl>
-                </SettingRow>
+                {activeSubTab === 'settings' && (
+                    <>
+                        <ModalHeader>
+                            <ModalTitle>설정 (Settings)</ModalTitle>
+                            <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                        </ModalHeader>
+                        
+                        {/* 소속 교회 정보 */}
+                        {userChurch && (
+                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '16px', border: '1px solid var(--sba-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-secondary)', fontWeight: 'bold' }}>소속 교회</span>
+                                    <span style={{ fontSize: '0.9rem', color: 'var(--sba-text)', fontWeight: '700' }}>
+                                        {userChurch.name} ({userChurch.role === 'admin' ? '관리자' : '지체'})
+                                    </span>
+                                </div>
+                                <ShadButton $variant="outline" onClick={handleLeaveChurch} style={{ flex: 'none', padding: '6px 12px', fontSize: '0.75rem', borderColor: '#ef4444', color: '#ef4444' }}>
+                                    탈퇴하기
+                                </ShadButton>
+                            </div>
+                        )}
 
-                {/* 글자 크기 설정 */}
-                <SettingRow>
-                    <SettingLabel>글자 크기 (Font Size)</SettingLabel>
-                    <SettingControl>
-                        <FontSizeBtn onClick={() => changeFontSize(-1.6)}>A-</FontSizeBtn>
-                        <FontSizeVal>{fontSize.toFixed(1)}px</FontSizeVal>
-                        <FontSizeBtn onClick={() => changeFontSize(1.6)}>A+</FontSizeBtn>
-                    </SettingControl>
-                </SettingRow>
+                        {/* 다크모드 설정 */}
+                        <SettingRow>
+                            <SettingLabel>다크 테마 (Dark Mode)</SettingLabel>
+                            <SettingControl>
+                                <SwitchContainer>
+                                    <SwitchInput 
+                                        type="checkbox" 
+                                        checked={isDark} 
+                                        onChange={e => setIsDark(e.target.checked)} 
+                                    />
+                                    <SwitchSlider $checked={isDark} />
+                                </SwitchContainer>
+                            </SettingControl>
+                        </SettingRow>
 
-                {/* 매일 말씀 알림 설정 */}
-                <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
-                        <b>매일 QT 알림 설정 (Notification)</b>
-                    </p>
-                    {!session ? (
-                        <div style={{ fontSize: '0.8rem', color: 'var(--sba-text-muted)', textAlign: 'center', padding: '8px 0' }}>
-                            로그인 후 알림 설정을 사용할 수 있습니다.
-                        </div>
-                    ) : (
-                        <>
-                            <SettingRow style={{ borderBottom: 'none', padding: '8px 0' }}>
-                                <SettingLabel>알림 받기</SettingLabel>
-                                <SettingControl>
-                                    <SwitchContainer>
-                                        <SwitchInput 
-                                            type="checkbox" 
-                                            checked={alarmEnabled} 
-                                            onChange={handleAlarmToggle} 
-                                        />
-                                        <SwitchSlider />
-                                    </SwitchContainer>
-                                </SettingControl>
-                            </SettingRow>
-                            {alarmEnabled && (
-                                <SettingRow style={{ borderBottom: 'none', padding: '8px 0' }}>
-                                    <SettingLabel>알림 시간</SettingLabel>
-                                    <SettingControl style={{ gap: '6px' }}>
-                                        <select 
-                                            value={alarmHour} 
-                                            onChange={(e) => handleAlarmTimeChange(e.target.value, alarmMinute)}
-                                            style={{
-                                                padding: '4px 8px',
-                                                borderRadius: '6px',
-                                                border: '1px solid var(--sba-border-strong)',
-                                                background: 'var(--sba-card-bg)',
-                                                color: 'var(--sba-text)',
-                                                fontSize: '0.85rem'
-                                            }}
-                                        >
-                                            {Array.from({ length: 24 }).map((_, i) => {
-                                                const h = String(i).padStart(2, '0');
-                                                return <option key={h} value={h}>{h}시</option>;
-                                            })}
-                                        </select>
-                                        <select 
-                                            value={alarmMinute} 
-                                            onChange={(e) => handleAlarmTimeChange(alarmHour, e.target.value)}
-                                            style={{
-                                                padding: '4px 8px',
-                                                borderRadius: '6px',
-                                                border: '1px solid var(--sba-border-strong)',
-                                                background: 'var(--sba-card-bg)',
-                                                color: 'var(--sba-text)',
-                                                fontSize: '0.85rem'
-                                            }}
-                                        >
-                                            {Array.from({ length: 12 }).map((_, i) => {
-                                                const m = String(i * 5).padStart(2, '0');
-                                                return <option key={m} value={m}>{m}분</option>;
-                                            })}
-                                        </select>
+                        {/* 글자 크기 설정 */}
+                        <SettingRow>
+                            <SettingLabel>글자 크기 (Font Size)</SettingLabel>
+                            <SettingControl>
+                                <FontSizeBtn onClick={() => changeFontSize(-1.6)}>A-</FontSizeBtn>
+                                <FontSizeVal>{fontSize.toFixed(1)}px</FontSizeVal>
+                                <FontSizeBtn onClick={() => changeFontSize(1.6)}>A+</FontSizeBtn>
+                            </SettingControl>
+                        </SettingRow>
+
+                        {/* 매일 말씀 알림 설정 */}
+                        <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
+                                <b>매일 말씀 알림 설정</b>
+                            </p>
+                            
+                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--sba-border)' }}>
+                                <SettingRow style={{ borderBottom: 'none', padding: '0 0 8px 0', margin: 0 }}>
+                                    <SettingLabel style={{ fontSize: '0.85rem' }}>브라우저 알림 수신</SettingLabel>
+                                    <SettingControl>
+                                        <SwitchContainer>
+                                            <SwitchInput 
+                                                type="checkbox" 
+                                                checked={alarmEnabled} 
+                                                onChange={handleAlarmToggle} 
+                                            />
+                                            <SwitchSlider $checked={alarmEnabled} />
+                                        </SwitchContainer>
                                     </SettingControl>
                                 </SettingRow>
+                                {alarmEnabled && (
+                                    <SettingRow style={{ borderBottom: 'none', padding: '8px 0 0 0', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <SettingLabel style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--sba-text-secondary)' }}>알림 시간</SettingLabel>
+                                        <SettingControl style={{ gap: '6px' }}>
+                                            <select 
+                                                value={alarmHour} 
+                                                onChange={(e) => handleAlarmTimeChange(e.target.value, alarmMinute)}
+                                                style={{
+                                                    padding: '4px 8px',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid var(--sba-border-strong)',
+                                                    background: 'var(--sba-card-bg)',
+                                                    color: 'var(--sba-text)',
+                                                    fontSize: '0.8rem'
+                                                }}
+                                            >
+                                                {Array.from({ length: 24 }).map((_, i) => {
+                                                    const h = String(i).padStart(2, '0');
+                                                    return <option key={h} value={h}>{h}시</option>;
+                                                })}
+                                            </select>
+                                            <select 
+                                                value={alarmMinute} 
+                                                onChange={(e) => handleAlarmTimeChange(alarmHour, e.target.value)}
+                                                style={{
+                                                    padding: '4px 8px',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid var(--sba-border-strong)',
+                                                    background: 'var(--sba-card-bg)',
+                                                    color: 'var(--sba-text)',
+                                                    fontSize: '0.8rem'
+                                                }}
+                                            >
+                                                {Array.from({ length: 12 }).map((_, i) => {
+                                                    const m = String(i * 5).padStart(2, '0');
+                                                    return <option key={m} value={m}>{m}분</option>;
+                                                })}
+                                            </select>
+                                        </SettingControl>
+                                    </SettingRow>
+                                )}
+                                <p style={{ fontSize: '0.7rem', color: 'var(--sba-text-muted)', margin: '6px 0 0 0', lineHeight: '1.4' }}>
+                                    ※ 화면이 꺼져도 수신됩니다. iOS는 '홈 화면에 추가(PWA)'한 경우에만 수신 가능합니다.
+                                </p>
+                            </div>
+
+                            {/* 알림 즉시 테스트 버튼 */}
+                            {alarmEnabled && (
+                                <button 
+                                    onClick={handleTestNotification}
+                                    disabled={isTesting}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        fontSize: '0.85rem',
+                                        border: '1px solid var(--sba-border-strong)',
+                                        borderRadius: '8px',
+                                        background: 'transparent',
+                                        color: 'var(--sba-text)',
+                                        cursor: 'pointer',
+                                        fontWeight: '600',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px',
+                                        transition: 'background-color 0.2s',
+                                        marginTop: '4px'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--sba-card-sub-bg)'}
+                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                    {isTesting ? '테스트 발송 중...' : '알림 즉시 테스트하기'}
+                                </button>
                             )}
-                        </>
-                    )}
-                </div>
+                        </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px', borderTop: '1px solid var(--sba-border)', paddingTop: '12px' }}>
-                    <span>북마크: {stats.bookmarks}개 | 메모: {stats.notes}개</span>
-                    <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 데이터 초기화</DeleteTextButton>
-                </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px', borderTop: '1px solid var(--sba-border)', paddingTop: '12px' }}>
+                            <span>북마크: {stats.bookmarks}개 | 메모: {stats.notes}개</span>
+                            <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 데이터 초기화</DeleteTextButton>
+                        </div>
 
-                {isAdmin && (
-                    <>
-                        <p style={{fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '16px 0 12px', borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '12px'}}>
-                            <b>관리자 전용 설정 (Admin)</b>
-                        </p>
+                        {/* 교회 관리자용 대시보드 버튼 */}
+                        {isAdmin && (
+                            <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
+                                    <b>교회 관리자 대시보드</b>
+                                </p>
+                                <ButtonGroup style={{ display: 'flex', gap: '8px' }}>
+                                    <ShadButton onClick={() => setActiveSubTab('admin_generate')} $variant="accent">
+                                        일정 자동 생성기
+                                    </ShadButton>
+                                    <ShadButton onClick={() => setActiveSubTab('admin_edit')} $variant="outline">
+                                        일정 달력 수동 수정
+                                    </ShadButton>
+                                </ButtonGroup>
+                            </div>
+                        )}
                         
-                        <FormGroup>
-                            <FormLabel>시작 기준일 (localStorage)</FormLabel>
-                            <FormInput 
-                                type="date" 
-                                value={startDateStr} 
-                                onChange={e => setStartDateStr(e.target.value)}
-                            />
-                        </FormGroup>
-                        
-                        <FormGroup>
-                            <FormLabel>Purge 관리자 토큰</FormLabel>
-                            <FormInput 
-                                type="password" 
-                                value={token} 
-                                onChange={e => setToken(e.target.value)}
-                            />
-                        </FormGroup>
-
-                        <AdminSectionTitle>지체들의 묵상 공유글 관리</AdminSectionTitle>
-                        <AdminReflList>
-                            {refls.length === 0 ? (
-                                <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--sba-text-muted)', padding: '10px 0' }}>공유된 글이 없습니다.</div>
-                            ) : (
-                                refls.map(r => (
-                                    <AdminReflItem key={r.id}>
-                                        <span>{r.author_name} - {r.passage}</span>
-                                        <DeleteTextButton onClick={() => handleDeleteRefl(r.id)}>삭제</DeleteTextButton>
-                                    </AdminReflItem>
-                                ))
-                            )}
-                        </AdminReflList>
-                        
-                        <ButtonGroup style={{ flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
-                            <ShadButton $variant="accent" onClick={handleSync} disabled={syncing}>
-                                {syncing ? '구글 시트 즉시 갱신 중...' : '구글 시트 즉시 동기화 (Purge)'}
+                        <ButtonGroup style={{ marginTop: '20px' }}>
+                            <ShadButton onClick={onClose}>
+                                확인
                             </ShadButton>
                         </ButtonGroup>
                     </>
                 )}
-                
-                <ButtonGroup style={{ marginTop: '20px' }}>
-                    <ShadButton onClick={onClose}>
-                        확인
-                    </ShadButton>
-                </ButtonGroup>
+
+                {activeSubTab === 'admin_generate' && (
+                    <>
+                        <ModalHeader>
+                            <ModalTitle>일정 자동 생성기</ModalTitle>
+                            <ModalCloseButton onClick={() => setActiveSubTab('settings')}>✕</ModalCloseButton>
+                        </ModalHeader>
+                        
+                        <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '4px' }}>
+                            <FormGroup>
+                                <FormLabel>큐티 일정 시작 날짜</FormLabel>
+                                <FormInput 
+                                    type="date" 
+                                    value={genStartDate}
+                                    onChange={e => setGenStartDate(e.target.value)}
+                                />
+                            </FormGroup>
+
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <FormLabel>시작 성경</FormLabel>
+                                    <select 
+                                        value={genStartBook} 
+                                        onChange={e => setGenStartBook(e.target.value)}
+                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
+                                    >
+                                        {BIBLE_BOOKS.map(b => (
+                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
+                                        ))}
+                                    </select>
+                                </FormGroup>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <FormLabel>시작 장</FormLabel>
+                                    <FormInput 
+                                        type="number" 
+                                        min="1" 
+                                        value={genStartChap}
+                                        onChange={e => setGenStartChap(parseInt(e.target.value) || 1)}
+                                    />
+                                </FormGroup>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <FormLabel>종료 성경</FormLabel>
+                                    <select 
+                                        value={genEndBook} 
+                                        onChange={e => setGenEndBook(e.target.value)}
+                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
+                                    >
+                                        {BIBLE_BOOKS.map(b => (
+                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
+                                        ))}
+                                    </select>
+                                </FormGroup>
+                                <FormGroup style={{ flex: 1 }}>
+                                    <FormLabel>종료 장</FormLabel>
+                                    <FormInput 
+                                        type="number" 
+                                        min="1" 
+                                        value={genEndChap}
+                                        onChange={e => setGenEndChap(parseInt(e.target.value) || 1)}
+                                    />
+                                </FormGroup>
+                            </div>
+
+                            <FormGroup>
+                                <FormLabel>하루당 진행할 분량 (장수)</FormLabel>
+                                <FormInput 
+                                    type="number" 
+                                    min="1" 
+                                    value={genPagesPerDay}
+                                    onChange={e => setGenPagesPerDay(parseInt(e.target.value) || 1)}
+                                />
+                            </FormGroup>
+
+                            <FormGroup>
+                                <FormLabel>제외할 요일 선택</FormLabel>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginTop: '6px' }}>
+                                    {['일', '월', '화', '수', '목', '금', '토'].map((day, idx) => (
+                                        <label key={day} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={genExcludeDays.includes(idx)}
+                                                onChange={e => {
+                                                    if (e.target.checked) {
+                                                        setGenExcludeDays([...genExcludeDays, idx]);
+                                                    } else {
+                                                        setGenExcludeDays(genExcludeDays.filter(d => d !== idx));
+                                                    }
+                                                }}
+                                            />
+                                            {day}요일
+                                        </label>
+                                    ))}
+                                </div>
+                            </FormGroup>
+                        </div>
+
+                        <ButtonGroup style={{ marginTop: '20px' }}>
+                            <ShadButton $variant="outline" onClick={() => setActiveSubTab('settings')}>
+                                취소
+                            </ShadButton>
+                            <ShadButton onClick={handleGenerateSchedule} disabled={syncing} $variant="accent">
+                                {syncing ? '생성 계산 중...' : '자동 생성 및 덮어쓰기'}
+                            </ShadButton>
+                        </ButtonGroup>
+                    </>
+                )}
+
+                {activeSubTab === 'admin_edit' && (
+                    <>
+                        <ModalHeader>
+                            <ModalTitle>일정 달력 수동 수정</ModalTitle>
+                            <ModalCloseButton onClick={() => setActiveSubTab('settings')}>✕</ModalCloseButton>
+                        </ModalHeader>
+                        
+                        <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '4px' }}>
+                            <FormGroup>
+                                <FormLabel>수정할 날짜 선택</FormLabel>
+                                <FormInput 
+                                    type="date" 
+                                    value={editDate}
+                                    onChange={e => setEditDate(e.target.value)}
+                                />
+                            </FormGroup>
+
+                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--sba-border)', marginBottom: '16px' }}>
+                                <p style={{ fontSize: '0.8rem', fontWeight: 'bold', margin: '0 0 10px 0', borderBottom: '1px solid var(--sba-border-strong)', paddingBottom: '4px' }}>1. 오늘의 묵상 (QT)</p>
+                                
+                                <FormGroup>
+                                    <FormLabel>묵상 성경 권</FormLabel>
+                                    <select 
+                                        value={editQtBook} 
+                                        onChange={e => setEditQtBook(e.target.value)}
+                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
+                                    >
+                                        <option value="">없음</option>
+                                        {BIBLE_BOOKS.map(b => (
+                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
+                                        ))}
+                                    </select>
+                                </FormGroup>
+
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>시작 장</FormLabel>
+                                        <FormInput type="number" min="1" value={editQtStartChap} onChange={e => setEditQtStartChap(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>시작 절</FormLabel>
+                                        <FormInput type="number" min="1" value={editQtStartVerse} onChange={e => setEditQtStartVerse(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>종료 장</FormLabel>
+                                        <FormInput type="number" min="1" value={editQtEndChap} onChange={e => setEditQtEndChap(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>종료 절</FormLabel>
+                                        <FormInput type="number" min="1" value={editQtEndVerse} onChange={e => setEditQtEndVerse(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                </div>
+
+                                <FormGroup>
+                                    <FormLabel>묵상 본문 제목</FormLabel>
+                                    <FormInput type="text" placeholder="예: 말씀으로 굳건히 서는 교회" value={editQtTitle} onChange={e => setEditQtTitle(e.target.value)} />
+                                </FormGroup>
+                            </div>
+
+                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--sba-border)' }}>
+                                <p style={{ fontSize: '0.8rem', fontWeight: 'bold', margin: '0 0 10px 0', borderBottom: '1px solid var(--sba-border-strong)', paddingBottom: '4px' }}>2. 성경 통독 (Reading)</p>
+                                
+                                <FormGroup>
+                                    <FormLabel>통독 성경 권</FormLabel>
+                                    <select 
+                                        value={editReadingBook} 
+                                        onChange={e => setEditReadingBook(e.target.value)}
+                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
+                                    >
+                                        <option value="">없음</option>
+                                        {BIBLE_BOOKS.map(b => (
+                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
+                                        ))}
+                                    </select>
+                                </FormGroup>
+
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>시작 장</FormLabel>
+                                        <FormInput type="number" min="1" value={editReadingStartChap} onChange={e => setEditReadingStartChap(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                    <FormGroup style={{ flex: 1 }}>
+                                        <FormLabel>종료 장</FormLabel>
+                                        <FormInput type="number" min="1" value={editReadingEndChap} onChange={e => setEditReadingEndChap(parseInt(e.target.value) || 1)} />
+                                    </FormGroup>
+                                </div>
+                            </div>
+                        </div>
+
+                        <ButtonGroup style={{ marginTop: '20px' }}>
+                            <ShadButton $variant="outline" onClick={() => setActiveSubTab('settings')}>
+                                취소
+                            </ShadButton>
+                            <ShadButton onClick={handleUpdateSchedule} disabled={syncing} $variant="accent">
+                                {syncing ? '저장 중...' : '일정 저장하기'}
+                            </ShadButton>
+                        </ButtonGroup>
+                    </>
+                )}
             </ModalContent>
         </ModalOverlay>
     );
@@ -1105,3 +1525,98 @@ export function AuthModal({ isOpen, onClose, addToast }) {
         </ModalOverlay>
     );
 }
+
+// ==========================================
+// 5. Accordion (styled-components)
+// ==========================================
+export const Accordion = styled.div`
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--sba-card-bg);
+  width: 100%;
+`;
+
+export const AccordionItem = styled.div`
+  border-bottom: 1px solid var(--sba-border);
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+export const AccordionTrigger = styled.button`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  color: var(--sba-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: var(--sba-card-sub-bg);
+  }
+`;
+
+export const AccordionContent = styled.div`
+  padding: 16px;
+  background-color: var(--sba-card-sub-bg);
+  color: var(--sba-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  border-top: 1px solid var(--sba-border);
+  display: ${props => props.$isOpen ? 'block' : 'none'};
+`;
+
+// ==========================================
+// 6. Table (styled-components)
+// ==========================================
+export const Table = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 0.875rem;
+  text-align: left;
+  border: 1px solid var(--sba-border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+`;
+
+export const TableHeader = styled.thead`
+  background-color: var(--sba-card-sub-bg);
+  border-bottom: 2px solid var(--sba-border-strong);
+`;
+
+export const TableRow = styled.tr`
+  border-bottom: 1px solid var(--sba-border);
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: var(--sba-card-active);
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+export const TableHead = styled.th`
+  padding: 12px 16px;
+  font-weight: 600;
+  color: var(--sba-text);
+`;
+
+export const TableBody = styled.tbody`
+  background-color: var(--sba-card-bg);
+`;
+
+export const TableCell = styled.td`
+  padding: 12px 16px;
+  color: var(--sba-text-secondary);
+`;

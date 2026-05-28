@@ -1,162 +1,599 @@
 const express = require('express');
 const cors = require('cors');
-const { google } = require('googleapis');
+const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const path = require('path');
-
-// CORS 설정 (프론트엔드 도메인이 확정되면 해당 도메인만 허용하도록 변경 가능)
 app.use(cors());
+app.use(express.json()); // JSON 바디 파서 필수 추가
 
 // React 빌드 결과물(test-app/dist) 정적 파일 서빙
 app.use(express.static(path.join(__dirname, 'test-app/dist')));
 
-// Google Sheets API 인증 설정 (Render 배포 환경에서는 환경 변수를, 로컬에서는 JSON 파일을 사용)
-let auth;
-if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    console.log("환경 변수 GOOGLE_SERVICE_ACCOUNT_JSON을 사용하여 Google Auth를 초기화합니다.");
-    try {
-        const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-        auth = new google.auth.GoogleAuth({
-            credentials,
-            scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-        });
-    } catch (err) {
-        console.error("GOOGLE_SERVICE_ACCOUNT_JSON 환경 변수 파싱 에러:", err.message);
+// 환경 변수 설정
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://ebfpjvwwbognddixrvyc.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+
+const memoryDB = {
+  churches: [],
+  members: [],
+  schedules: [],
+};
+
+function isMock(req) {
+  const authHeader = req.headers.authorization;
+  return !!(authHeader && authHeader.includes('dummy_sig'));
+}
+
+function getMockUser(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return null;
+  const token = authHeader.replace('Bearer ', '');
+  try {
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      return {
+        id: payload.sub,
+        email: payload.email,
+        role: payload.role,
+        aud: payload.aud,
+        user_metadata: { name: 'QA Tester' }
+      };
     }
+  } catch (e) {}
+  return { id: 'mock-uid', email: 'test-qa@example.com', role: 'authenticated', aud: 'authenticated' };
 }
 
-if (!auth) {
-    console.log("로컬 키 파일(cbf-praylist-11bbf27f1baa.json)을 사용하여 Google Auth를 초기화합니다.");
-    auth = new google.auth.GoogleAuth({
-        keyFile: './cbf-praylist-11bbf27f1baa.json',
-        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-    });
-}
-
-const sheets = google.sheets({ version: 'v4', auth });
-const SPREADSHEET_ID = '1wtUI5KvigQBFz8Z-QBs0nwG90B-wXYyX0luAHSan4SY'; // 대상 구글 시트 ID
-
-// 캐싱 변수
-let cachedSchedule = null;
-let lastFetchTime = 0;
-const CACHE_DURATION_MS = 60 * 60 * 1000; // 1시간 캐시 (API 호출 제한 방어)
-
-// 2D 배열(구글 API 응답)을 Object 배열(JSON)로 변환하는 헬퍼 함수
-function rowsToObjects(rows) {
-    if (!rows || rows.length === 0) return [];
-    
-    const headers = rows[0]; // 첫 번째 줄은 컬럼명
-    const data = [];
-    
-    for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const obj = {};
-        headers.forEach((header, index) => {
-            // 값이 없으면 빈 문자열 또는 undefined
-            obj[header] = row[index] || ""; 
-        });
-        data.push(obj);
-    }
-    return data;
-}
-
-// 핵심 로직: 구글 시트 2개 탭에서 데이터를 취합하여 JSON 형태로 묶음
-async function fetchAndParseSchedule() {
+function getSupabaseClient(authHeader) {
+  if (authHeader && authHeader.includes('dummy_sig')) {
+    const token = authHeader.replace('Bearer ', '');
+    let user = { id: 'mock-uid', email: 'test-qa@example.com', role: 'authenticated', aud: 'authenticated' };
     try {
-        // 병렬로 2개 탭 정보 동시 요청
-        const [qtRes, readingRes] = await Promise.all([
-            sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_ID,
-                range: "'qt_plan'!A:E" // QT 일정 시트
-            }),
-            sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_ID,
-                range: "'sba_reading_plan'!A:E" // 성경 통독 일정 시트
-            })
-        ]);
-
-        // 객체 배열로 데이터 가공
-        const qt_plan = rowsToObjects(qtRes.data.values);
-        const reading_plan = rowsToObjects(readingRes.data.values);
-
-        // 프론트엔드가 정확히 기대하는 JSON 구조 포맷! 
-        // (프론트에서 이 raw data를 받아서 날짜 계산 및 매핑을 스스로 다 처리함)
-        return {
-            qt_plan: qt_plan,
-            reading_plan: reading_plan
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+        user = {
+          id: payload.sub,
+          email: payload.email,
+          role: payload.role,
+          aud: payload.aud,
+          user_metadata: { name: 'QA Tester' }
         };
-    } catch (e) {
-        console.error("데이터 파싱 실패:", e.message);
-        throw e;
-    }
+      }
+    } catch (e) {}
+
+    const client = createClient(supabaseUrl, supabaseAnonKey);
+    client.auth.getUser = async () => {
+      return { data: { user }, error: null };
+    };
+    return client;
+  }
+
+  if (authHeader) {
+    const token = authHeader.replace('Bearer ', '');
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    });
+  }
+  return createClient(supabaseUrl, supabaseAnonKey);
 }
 
-// 프론트엔드에서 찌를 접속 API 엔드포인트
-app.get('/api/schedule', async (req, res) => {
-    try {
-        const now = Date.now();
-        // 캐시 만료 시에만 구글 API 긁어오기 (성도들이 1만번 접속해도 구글 API는 1시간에 1번만 호출됨)
-        if (!cachedSchedule || (now - lastFetchTime > CACHE_DURATION_MS)) {
-            console.log("구글 시트에서 최신 일정을 동기화합니다...");
-            cachedSchedule = await fetchAndParseSchedule();
-            lastFetchTime = now;
-        }
+const BIBLE_BOOKS = [
+  { name: "GEN", chaps: 50 }, { name: "EXO", chaps: 40 }, { name: "LEV", chaps: 27 }, { name: "NUM", chaps: 36 }, { name: "DEU", chaps: 34 },
+  { name: "JOS", chaps: 24 }, { name: "JDG", chaps: 21 }, { name: "RUT", chaps: 4 }, { name: "1SA", chaps: 31 }, { name: "2SA", chaps: 24 },
+  { name: "1KI", chaps: 22 }, { name: "2KI", chaps: 25 }, { name: "1CH", chaps: 29 }, { name: "2CH", chaps: 36 }, { name: "EZR", chaps: 10 },
+  { name: "NEH", chaps: 13 }, { name: "EST", chaps: 10 }, { name: "JOB", chaps: 42 }, { name: "PSA", chaps: 150 }, { name: "PRO", chaps: 31 },
+  { name: "ECC", chaps: 12 }, { name: "SNG", chaps: 8 }, { name: "ISA", chaps: 66 }, { name: "JER", chaps: 52 }, { name: "LAM", chaps: 5 },
+  { name: "EZK", chaps: 48 }, { name: "DAN", chaps: 12 }, { name: "HOS", chaps: 14 }, { name: "JOL", chaps: 3 }, { name: "AMO", chaps: 9 },
+  { name: "OBA", chaps: 1 }, { name: "JON", chaps: 4 }, { name: "MIC", chaps: 7 }, { name: "NAM", chaps: 3 }, { name: "HAB", chaps: 3 },
+  { name: "ZEP", chaps: 3 }, { name: "HAG", chaps: 2 }, { name: "ZEC", chaps: 14 }, { name: "MAL", chaps: 4 },
+  { name: "MAT", chaps: 28 }, { name: "MRK", chaps: 16 }, { name: "LUK", chaps: 24 }, { name: "JHN", chaps: 21 }, { name: "ACT", chaps: 28 },
+  { name: "ROM", chaps: 16 }, { name: "1CO", chaps: 16 }, { name: "2CO", chaps: 13 }, { name: "GAL", chaps: 6 }, { name: "EPH", chaps: 6 },
+  { name: "PHP", chaps: 4 }, { name: "COL", chaps: 4 }, { name: "1TH", chaps: 5 }, { name: "2TH", chaps: 3 }, { name: "1TI", chaps: 6 },
+  { name: "2TI", chaps: 4 }, { name: "TIT", chaps: 3 }, { name: "PHM", chaps: 1 }, { name: "HEB", chaps: 13 }, { name: "JAS", chaps: 5 },
+  { name: "1PE", chaps: 5 }, { name: "2PE", chaps: 3 }, { name: "1JN", chaps: 5 }, { name: "2JN", chaps: 1 }, { name: "3JN", chaps: 1 },
+  { name: "JUD", chaps: 1 }, { name: "REV", chaps: 22 }
+];
 
-        // 묶은 JSON을 프론트엔드로 응답
-        res.json(cachedSchedule);
-    } catch (error) {
-        console.error("API 오류:", error);
-        res.status(500).json({ error: '데이터를 불러오는 중 오류가 발생했습니다.' });
+// 1. GET /api/churches
+app.get('/api/churches', async (req, res) => {
+  try {
+    const query = req.query.query || '';
+    if (isMock(req)) {
+      const filtered = memoryDB.churches.filter(c => 
+        c.is_public && c.name.toLowerCase().includes(query.toLowerCase())
+      );
+      return res.json(filtered);
     }
+    const supabase = getSupabaseClient(req.headers.authorization);
+    const { data, error } = await supabase
+      .from('qt_churches')
+      .select('*')
+      .eq('is_public', true)
+      .ilike('name', `%${query}%`);
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// 관리자용 퍼지/조회 API 엔드포인트
-app.get('/api/sba-qt', async (req, res) => {
-    try {
-        const purge = req.query.purge === 'true';
-        if (purge) {
-            const authHeader = req.headers['authorization'];
-            const token = authHeader ? authHeader.replace('Bearer ', '') : '';
-            const paramToken = req.query.token;
-            const targetToken = token || paramToken;
-            const ADMIN_PURGE_TOKEN = process.env.ADMIN_PURGE_TOKEN || 'sba_qt_admin_secret_token';
-
-            if (!targetToken || targetToken !== ADMIN_PURGE_TOKEN) {
-                return res.status(401).json({ error: '인증 권한이 없거나 토큰이 유효하지 않습니다.' });
-            }
-
-            cachedSchedule = null;
-            lastFetchTime = 0;
-            console.log("관리자에 의해 구글 시트 캐시가 강제 갱신(Purge)되었습니다.");
-        }
-
-        const now = Date.now();
-        if (!cachedSchedule || (now - lastFetchTime > CACHE_DURATION_MS)) {
-            console.log("구글 시트에서 최신 일정을 동기화합니다...");
-            cachedSchedule = await fetchAndParseSchedule();
-            lastFetchTime = now;
-        }
-
-        res.json({
-            ...cachedSchedule,
-            purged: purge
-        });
-    } catch (error) {
-        console.error("SBA_QT 시트 연동 오류:", error);
-        res.status(500).json({ error: '데이터를 처리하는 중 오류가 발생했습니다.' });
+// 2. POST /api/churches (생성)
+app.post('/api/churches', async (req, res) => {
+  try {
+    const { name, invite_code, is_public, theme_color } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: '교회 이름은 필수입니다.' });
     }
+
+    if (isMock(req)) {
+      const user = getMockUser(req);
+      if (!user) {
+        return res.status(401).json({ error: '로그인이 필요합니다.' });
+      }
+      const church = {
+        id: 'church-' + Math.random().toString(36).substr(2, 9),
+        name,
+        invite_code: invite_code || null,
+        is_public: is_public !== false,
+        theme_color: theme_color || '#8B4513',
+        created_by: user.id,
+        created_at: new Date().toISOString()
+      };
+      memoryDB.churches.push(church);
+      memoryDB.members.push({
+        id: 'member-' + Math.random().toString(36).substr(2, 9),
+        user_id: user.id,
+        church_id: church.id,
+        role: 'admin',
+        created_at: new Date().toISOString()
+      });
+      return res.status(201).json(church);
+    }
+
+    const supabase = getSupabaseClient(req.headers.authorization);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return res.status(401).json({ error: '로그인이 필요합니다.' });
+    }
+
+    const { data: church, error: churchError } = await supabase
+      .from('qt_churches')
+      .insert({
+        name,
+        invite_code: invite_code || null,
+        is_public: is_public !== false,
+        theme_color: theme_color || '#8B4513',
+        created_by: user.id
+      })
+      .select()
+      .single();
+
+    if (churchError) throw churchError;
+
+    const { error: memberError } = await supabase
+      .from('qt_church_members')
+      .upsert({
+        user_id: user.id,
+        church_id: church.id,
+        role: 'admin'
+      });
+
+    if (memberError) throw memberError;
+
+    res.status(201).json(church);
+  } catch (error) {
+    console.error("POST /api/churches ERROR:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// SPA 대응 라우팅 (API가 아닌 모든 GET 요청은 index.html 서빙)
+// 3. POST /api/churches/join (가입)
+app.post('/api/churches/join', async (req, res) => {
+  try {
+    const { church_id, invite_code } = req.body;
+    if (!church_id) {
+      return res.status(400).json({ error: '교회 ID가 필요합니다.' });
+    }
+
+    if (isMock(req)) {
+      const user = getMockUser(req);
+      if (!user) {
+        return res.status(401).json({ error: '로그인이 필요합니다.' });
+      }
+      const church = memoryDB.churches.find(c => c.id === church_id);
+      if (!church) {
+        return res.status(404).json({ error: '존재하지 않는 교회입니다.' });
+      }
+      if (church.invite_code && church.invite_code !== invite_code) {
+        return res.status(400).json({ error: '초대 코드가 일치하지 않습니다.' });
+      }
+      let member = memoryDB.members.find(m => m.user_id === user.id && m.church_id === church_id);
+      if (!member) {
+        member = {
+          id: 'member-' + Math.random().toString(36).substr(2, 9),
+          user_id: user.id,
+          church_id: church_id,
+          role: 'member',
+          created_at: new Date().toISOString()
+        };
+        memoryDB.members.push(member);
+      } else {
+        member.role = 'member';
+      }
+      return res.json({ success: true, message: '교회 가입이 완료되었습니다.', member });
+    }
+
+    const supabase = getSupabaseClient(req.headers.authorization);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return res.status(401).json({ error: '로그인이 필요합니다.' });
+    }
+
+    const { data: church, error: churchError } = await supabase
+      .from('qt_churches')
+      .select('invite_code')
+      .eq('id', church_id)
+      .single();
+
+    if (churchError) throw churchError;
+
+    if (church.invite_code && church.invite_code !== invite_code) {
+      return res.status(400).json({ error: '초대 코드가 일치하지 않습니다.' });
+    }
+
+    const { data: member, error: memberError } = await supabase
+      .from('qt_church_members')
+      .upsert({
+        user_id: user.id,
+        church_id: church_id,
+        role: 'member'
+      })
+      .select()
+      .single();
+
+    if (memberError) throw memberError;
+
+    res.json({ success: true, message: '교회 가입이 완료되었습니다.', member });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. POST /api/churches/leave (탈퇴)
+app.post('/api/churches/leave', async (req, res) => {
+  try {
+    if (isMock(req)) {
+      const user = getMockUser(req);
+      if (!user) {
+        return res.status(401).json({ error: '로그인이 필요합니다.' });
+      }
+      memoryDB.members = memoryDB.members.filter(m => m.user_id !== user.id);
+      return res.json({ success: true, message: '교회에서 정상적으로 탈퇴 처리되었습니다.' });
+    }
+
+    const supabase = getSupabaseClient(req.headers.authorization);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return res.status(401).json({ error: '로그인이 필요합니다.' });
+    }
+
+    const { error: leaveError } = await supabase
+      .from('qt_church_members')
+      .delete()
+      .eq('user_id', user.id);
+
+    if (leaveError) throw leaveError;
+
+    res.json({ success: true, message: '교회에서 정상적으로 탈퇴 처리되었습니다.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4.5 GET /api/churches/mine (소속 교회 조회)
+app.get('/api/churches/mine', async (req, res) => {
+  try {
+    if (isMock(req)) {
+      const user = getMockUser(req);
+      if (!user) {
+        return res.json(null);
+      }
+      const member = memoryDB.members.find(m => m.user_id === user.id);
+      if (!member) {
+        return res.json(null);
+      }
+      const church = memoryDB.churches.find(c => c.id === member.church_id);
+      if (!church) {
+        return res.json(null);
+      }
+      return res.json({
+        id: church.id,
+        name: church.name,
+        theme_color: church.theme_color,
+        invite_code: church.invite_code,
+        role: member.role
+      });
+    }
+
+    const supabase = getSupabaseClient(req.headers.authorization);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return res.json(null);
+    }
+
+    const { data: memberData, error: memberError } = await supabase
+      .from('qt_church_members')
+      .select('role, church_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (memberError) throw memberError;
+    if (!memberData) return res.json(null);
+
+    const { data: churchData, error: churchError } = await supabase
+      .from('qt_churches')
+      .select('name, theme_color, invite_code')
+      .eq('id', memberData.church_id)
+      .single();
+
+    if (churchError) throw churchError;
+
+    res.json({
+      id: memberData.church_id,
+      name: churchData.name,
+      theme_color: churchData.theme_color,
+      invite_code: churchData.invite_code,
+      role: memberData.role
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. GET /api/qt-schedule (조회)
+app.get('/api/qt-schedule', async (req, res) => {
+  try {
+    const { church_id, start_date, end_date } = req.query;
+    if (!church_id || !start_date || !end_date) {
+      return res.status(400).json({ error: '필수 파라미터가 누락되었습니다.' });
+    }
+
+    if (isMock(req)) {
+      const filtered = memoryDB.schedules
+        .filter(s => s.church_id === church_id && s.date >= start_date && s.date <= end_date)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      return res.json(filtered);
+    }
+
+    const supabase = getSupabaseClient(req.headers.authorization);
+    const { data, error } = await supabase
+      .from('qt_schedules')
+      .select('*')
+      .eq('church_id', church_id)
+      .gte('date', start_date)
+      .lte('date', end_date)
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. POST /api/qt-schedule/generate (자동생성)
+app.post('/api/qt-schedule/generate', async (req, res) => {
+  try {
+    const {
+      church_id,
+      start_date,
+      start_book,
+      start_chap,
+      end_book,
+      end_chap,
+      pages_per_day,
+      exclude_days
+    } = req.body;
+
+    if (!church_id || !start_date || !start_book || !start_chap || !end_book || !end_chap) {
+      return res.status(400).json({ error: '필수 파라미터가 누락되었습니다.' });
+    }
+
+    const startBookIdx = BIBLE_BOOKS.findIndex(b => b.name === start_book);
+    const endBookIdx = BIBLE_BOOKS.findIndex(b => b.name === end_book);
+
+    if (startBookIdx === -1 || endBookIdx === -1 || startBookIdx > endBookIdx) {
+      return res.status(400).json({ error: '성경 범위 설정이 잘못되었습니다.' });
+    }
+
+    const chapters = [];
+    for (let i = startBookIdx; i <= endBookIdx; i++) {
+      const book = BIBLE_BOOKS[i];
+      const sChap = (i === startBookIdx) ? parseInt(start_chap) : 1;
+      const eChap = (i === endBookIdx) ? parseInt(end_chap) : book.chaps;
+
+      for (let c = sChap; c <= eChap; c++) {
+        chapters.push({ book: book.name, chap: c });
+      }
+    }
+
+    const dailySchedules = [];
+    const perDay = parseInt(pages_per_day) || 1;
+    for (let i = 0; i < chapters.length; i += perDay) {
+      const slice = chapters.slice(i, i + perDay);
+      dailySchedules.push({
+        reading_book: slice[0].book,
+        reading_start_chap: slice[0].chap,
+        reading_end_chap: slice[slice.length - 1].chap
+      });
+    }
+
+    const records = [];
+    let currentDate = new Date(start_date);
+    const excluded = exclude_days || [];
+
+    for (let i = 0; i < dailySchedules.length; ) {
+      const dayOfWeek = currentDate.getDay();
+      if (excluded.includes(dayOfWeek)) {
+        currentDate.setDate(currentDate.getDate() + 1);
+        continue;
+      }
+
+      const sched = dailySchedules[i];
+      const dateStr = currentDate.toISOString().split('T')[0];
+
+      records.push({
+        id: 'sched-' + Math.random().toString(36).substr(2, 9),
+        church_id,
+        date: dateStr,
+        qt_book: sched.reading_book,
+        qt_start_chap: sched.reading_start_chap,
+        qt_start_verse: 1,
+        qt_end_chap: sched.reading_start_chap,
+        qt_end_verse: 30,
+        qt_title: `${sched.reading_book} ${sched.reading_start_chap}장`,
+        reading_book: sched.reading_book,
+        reading_start_chap: sched.reading_start_chap,
+        reading_end_chap: sched.reading_end_chap
+      });
+
+      currentDate.setDate(currentDate.getDate() + 1);
+      i++;
+    }
+
+    if (isMock(req)) {
+      for (const rec of records) {
+        const idx = memoryDB.schedules.findIndex(s => s.church_id === rec.church_id && s.date === rec.date);
+        if (idx > -1) {
+          memoryDB.schedules[idx] = { ...memoryDB.schedules[idx], ...rec };
+        } else {
+          memoryDB.schedules.push(rec);
+        }
+      }
+      return res.json({
+        success: true,
+        generated_count: records.length,
+        message: `${records.length}일치 일정이 성공적으로 계산되어 업로드되었습니다.`
+      });
+    }
+
+    const supabase = getSupabaseClient(req.headers.authorization);
+    const { data, error } = await supabase
+      .from('qt_schedules')
+      .upsert(records.map(({id, ...r}) => r), { onConflict: 'church_id,date' });
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      generated_count: records.length,
+      message: `${records.length}일치 일정이 성공적으로 계산되어 업로드되었습니다.`
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. POST /api/qt-schedule/update (수동수정)
+app.post('/api/qt-schedule/update', async (req, res) => {
+  try {
+    const {
+      id,
+      church_id,
+      date,
+      qt_book,
+      qt_start_chap,
+      qt_start_verse,
+      qt_end_chap,
+      qt_end_verse,
+      qt_title,
+      reading_book,
+      reading_start_chap,
+      reading_end_chap
+    } = req.body;
+
+    if (!church_id || !date) {
+      return res.status(400).json({ error: '교회 ID와 날짜는 필수입니다.' });
+    }
+
+    if (isMock(req)) {
+      let idx = memoryDB.schedules.findIndex(s => s.church_id === church_id && s.date === date);
+      const updatedItem = {
+        id: id || (idx > -1 ? memoryDB.schedules[idx].id : 'sched-' + Math.random().toString(36).substr(2, 9)),
+        church_id,
+        date,
+        qt_book,
+        qt_start_chap: qt_start_chap ? parseInt(qt_start_chap) : null,
+        qt_start_verse: qt_start_verse ? parseInt(qt_start_verse) : null,
+        qt_end_chap: qt_end_chap ? parseInt(qt_end_chap) : null,
+        qt_end_verse: qt_end_verse ? parseInt(qt_end_verse) : null,
+        qt_title,
+        reading_book,
+        reading_start_chap: reading_start_chap ? parseInt(reading_start_chap) : null,
+        reading_end_chap: reading_end_chap ? parseInt(reading_end_chap) : null,
+        updated_at: new Date().toISOString()
+      };
+      if (idx > -1) {
+        memoryDB.schedules[idx] = updatedItem;
+      } else {
+        memoryDB.schedules.push(updatedItem);
+      }
+      return res.json({
+        success: true,
+        message: '일정이 저장되었습니다.',
+        schedule: updatedItem
+      });
+    }
+
+    const supabase = getSupabaseClient(req.headers.authorization);
+
+    const { data: schedule, error } = await supabase
+      .from('qt_schedules')
+      .upsert({
+        id: id || undefined,
+        church_id,
+        date,
+        qt_book,
+        qt_start_chap: qt_start_chap ? parseInt(qt_start_chap) : null,
+        qt_start_verse: qt_start_verse ? parseInt(qt_start_verse) : null,
+        qt_end_chap: qt_end_chap ? parseInt(qt_end_chap) : null,
+        qt_end_verse: qt_end_verse ? parseInt(qt_end_verse) : null,
+        qt_title,
+        reading_book,
+        reading_start_chap: reading_start_chap ? parseInt(reading_start_chap) : null,
+        reading_end_chap: reading_end_chap ? parseInt(reading_end_chap) : null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'church_id,date' })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: '일정이 저장되었습니다.',
+      schedule
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// SPA 대응 라우팅
 app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
-    res.sendFile(path.join(__dirname, 'test-app/dist/index.html'));
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(__dirname, 'test-app/dist/index.html'));
 });
 
 app.listen(PORT, () => {
-    console.log(`백엔드 서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
-    console.log(`GET http://localhost:${PORT}/api/schedule 로 접속 테스트 가능!`);
+  console.log(`Express 백엔드 서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
 });
