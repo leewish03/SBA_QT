@@ -26,6 +26,12 @@ function generateUUID() {
         args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     const page = await browser.newPage();
+
+    // Mock confirm & alert to prevent Puppeteer blocking
+    await page.evaluateOnNewDocument(() => {
+        window.confirm = () => true;
+        window.alert = () => {};
+    });
     
     // Set viewport to mobile size
     await page.setViewport({ width: 375, height: 812, isMobile: true, hasTouch: true });
@@ -37,6 +43,21 @@ function generateUUID() {
             console.log('[BROWSER ERROR]:', text);
         } else {
             console.log(`[BROWSER LOG]: ${text}`);
+        }
+    });
+    
+    // Listen to network responses for API debugging
+    page.on('response', async response => {
+        const status = response.status();
+        const url = response.url();
+        if (url.includes('/api/')) {
+            console.log(`[API RESPONSE]: ${status} - ${url}`);
+            if (status >= 400) {
+                try {
+                    const text = await response.text();
+                    console.log(`[API ERROR BODY]: ${text}`);
+                } catch (e) {}
+            }
         }
     });
 
@@ -55,13 +76,16 @@ function generateUUID() {
         const testUuid = generateUUID();
         console.log(`2. Injecting mock session for user: ${testUuid}`);
         await page.evaluate((uuid) => {
-            // Create a valid 3-part mock JWT with dummy_sig signature
             const header = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"; // {"alg":"HS256","typ":"JWT"}
+            const iat = Math.floor(Date.now() / 1000);
+            const exp = iat + 3600;
             const payloadObj = {
                 sub: uuid,
                 email: "test-qa@example.com",
                 role: "authenticated",
-                aud: "authenticated"
+                aud: "authenticated",
+                iat: iat,
+                exp: exp
             };
             // Simple base64url encode helper
             const payload = btoa(JSON.stringify(payloadObj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
