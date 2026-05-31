@@ -20,7 +20,7 @@ function generateUUID() {
 }
 
 (async () => {
-    console.log('=== Starting E2E QA Test Script ===');
+    console.log('=== Starting E2E QA Test Script (Sheets Rollback) ===');
     const browser = await puppeteer.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -62,10 +62,6 @@ function generateUUID() {
     });
 
     try {
-        // 1. Splash & Guest Onboarding
-        console.log('1. Navigating to http://localhost:3000/seoul-north...');
-        await page.goto('http://localhost:3000/seoul-north', { waitUntil: 'networkidle2' });
-        
         async function captureAndLog(filename) {
             const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 150));
             console.log(`[CAPTURE ${filename}] Body Text Preview: "${bodyText.replace(/\n/g, ' ')}"`);
@@ -73,6 +69,10 @@ function generateUUID() {
             console.log(`Saved: ${filename}`);
         }
 
+        // 1. Splash & Guest Onboarding
+        console.log('1. Navigating to http://localhost:3000/seoul-north...');
+        await page.goto('http://localhost:3000/seoul-north', { waitUntil: 'networkidle2' });
+        
         console.log('Waiting for splash screen...');
         await delay(4500); // 4.5s delay to ensure splash is fully gone
 
@@ -93,7 +93,6 @@ function generateUUID() {
                 iat: iat,
                 exp: exp
             };
-            // Simple base64url encode helper
             const payload = btoa(JSON.stringify(payloadObj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
             const token = `${header}.${payload}.dummy_sig`;
 
@@ -128,21 +127,12 @@ function generateUUID() {
         } catch (e) {
             await delay(4500);
         }
-        await delay(1000); // Ensure state updates complete
-
-        // Debug: print localStorage keys and session
-        const lsKeys = await page.evaluate(() => {
-            return {
-                keys: Object.keys(localStorage),
-                session: localStorage.getItem('sb-localhost-auth-token') ? 'FOUND_LOCALHOST' : 'NOT_FOUND_LOCALHOST'
-            };
-        });
-        console.log('localStorage status after reload:', lsKeys);
+        await delay(1500); // Ensure state updates complete
 
         await captureAndLog('qa_2_main_meditation.png');
 
-        // 4. Open Settings Modal for Admin operations
-        console.log('4. Opening Settings Modal...');
+        // 3. Open Settings Modal for Admin operations (Google Sheet Admin view)
+        console.log('3. Opening Settings Modal...');
         const settingsBtn = await page.$('button[title="설정"]');
         if (settingsBtn) {
             await page.evaluate((btn) => btn.click(), settingsBtn);
@@ -151,145 +141,87 @@ function generateUUID() {
             console.error('Failed to find Settings button');
         }
 
-        // Click Admin Generate tab inside settings
-        console.log('Switching to Admin Schedule Generation tab...');
-        await page.evaluate(() => {
-            // Find tab button by text or index.
-            const btns = Array.from(document.querySelectorAll('button'));
-            const genBtn = btns.find(b => b.textContent.includes('일정 자동 생성기'));
-            if (genBtn) genBtn.click();
-        });
-        await delay(800);
-
-        // Fill Schedule Generation form
-        console.log('Filling Schedule Generation form...');
-        // Change Bible Range (Start Book, End Book, etc.)
-        await page.evaluate(() => {
-            const selects = Array.from(document.querySelectorAll('select'));
-            // Start Book Select
-            if (selects.length >= 2) {
-                selects[0].value = 'MAT'; // Matthew
-                selects[0].dispatchEvent(new Event('change', { bubbles: true }));
-                selects[1].value = 'MAT'; // End Book
-                selects[1].dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            
-            // 종료 장을 2장으로 설정하기 위해 종료 장 인풋을 찾습니다.
-            const divs = Array.from(document.querySelectorAll('div'));
-            const endChapDiv = divs.find(d => d.innerText && d.innerText.includes('종료 장') && !d.innerText.includes('종료 성경'));
-            if (endChapDiv) {
-                const input = endChapDiv.querySelector('input');
-                if (input) {
-                    input.value = '2';
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-            }
-        });
-        
+        // Capture Settings Modal showing admin section (Purge / startDateStr)
         await captureAndLog('qa_5_settings_admin_tab.png');
 
-        // Handle dialog alert if any
-        page.on('dialog', async dialog => {
-            console.log('Accepting dialog:', dialog.message());
-            await dialog.accept();
-        });
-
-        // Click Generate Bulk Schedules
-        console.log('Triggering bulk schedule generation...');
+        // Change startDateStr (묵상 기준일 설정) to 2026-05-01
+        console.log('Changing 묵상 기준일 설정...');
         await page.evaluate(() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            const genSubmitBtn = btns.find(b => b.textContent.includes('자동 생성 및 덮어쓰기'));
-            if (genSubmitBtn) genSubmitBtn.click();
-        });
-        
-        await delay(4000); // Wait for API bulk process
-
-        // Re-open settings to test manual edit
-        console.log('Re-opening Settings for manual edit...');
-        const settingsBtn2 = await page.$('button[title="설정"]');
-        if (settingsBtn2) {
-            await page.evaluate((btn) => btn.click(), settingsBtn2);
-            await delay(1500);
-        }
-
-        // Switch to Manual Edit tab
-        console.log('Switching to Admin Schedule Manual Edit tab...');
-        await page.evaluate(() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            const editBtn = btns.find(b => b.textContent.includes('일정 달력 수동 수정'));
-            if (editBtn) editBtn.click();
-        });
-        await delay(800);
-
-        // Fill manual edit form
-        console.log('Filling manual schedule edit form...');
-        await page.evaluate(() => {
-            // 1. 날짜 설정 (수정할 날짜 선택)
             const dateInput = document.querySelector('input[type="date"]');
             if (dateInput) {
-                const now = new Date();
-                const y = now.getFullYear();
-                const m = String(now.getMonth() + 1).padStart(2, '0');
-                const d = String(now.getDate()).padStart(2, '0');
-                const dateStr = `${y}-${m}-${d}`;
-                dateInput.value = dateStr;
+                dateInput.value = '2026-05-01';
                 dateInput.dispatchEvent(new Event('input', { bubbles: true }));
                 dateInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-
-            // 2. 묵상/통독 성경 권 select
-            const selects = Array.from(document.querySelectorAll('select'));
-            if (selects.length >= 2) {
-                // 묵상 성경 권
-                selects[0].value = 'MAT';
-                selects[0].dispatchEvent(new Event('change', { bubbles: true }));
-                
-                // 통독 성경 권
-                selects[1].value = 'GEN';
-                selects[1].dispatchEvent(new Event('change', { bubbles: true }));
-            }
-
-            // 3. 묵상 본문 제목 input
-            const titleInput = document.querySelector('input[placeholder*="말씀으로"]');
-            if (titleInput) {
-                titleInput.value = '그리스도의 계보';
-                titleInput.dispatchEvent(new Event('input', { bubbles: true }));
             }
         });
         await delay(500);
 
-        await captureAndLog('qa_6_settings_manual_edit.png');
-
-        // Save manual schedule
-        console.log('Saving manual schedule...');
+        // Click Google Sheets Purge button
+        console.log('Triggering Google Sheets Purge sync...');
         await page.evaluate(() => {
             const btns = Array.from(document.querySelectorAll('button'));
-            const saveBtn = btns.find(b => b.textContent.includes('일정 저장하기'));
-            if (saveBtn) saveBtn.click();
+            const purgeBtn = btns.find(b => b.textContent.includes('구글 스프레드시트 캐시 갱신'));
+            if (purgeBtn) purgeBtn.click();
         });
-        await delay(3000); // Wait for API update
+        await delay(3000); // Wait for API sync to complete & settings modal to auto-close
 
-        // Re-open settings to check settings push config & telegram removal
-        console.log('Re-opening Settings for push config check...');
-        const settingsBtn3 = await page.$('button[title="설정"]');
-        if (settingsBtn3) {
-            await page.evaluate((btn) => btn.click(), settingsBtn3);
+        // 4. Open Calendar Modal & Change Date (Replaces manual edit screen QA)
+        console.log('4. Opening Calendar Modal...');
+        const dateNavHeader = await page.$('.sba-date-nav-wrapper h1');
+        if (dateNavHeader) {
+            await page.evaluate((el) => el.click(), dateNavHeader);
+            await delay(1500);
+        } else {
+            console.error('Failed to find Date navigation header for calendar');
+        }
+
+        // Switch to CalendarGrid View (달력에서 선택하기 버튼 클릭)
+        console.log('Switching to Calendar Grid mode...');
+        await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const calBtn = btns.find(b => b.textContent.includes('달력에서 선택하기'));
+            if (calBtn) calBtn.click();
+        });
+        await delay(1000);
+
+        // Capture Calendar grid view
+        await captureAndLog('qa_6_settings_manual_edit.png');
+
+        // Select a date from calendar grid (e.g. 15th)
+        console.log('Selecting 15th from calendar grid...');
+        await page.evaluate(() => {
+            const dayCell = document.querySelector('div[data-qa="calendar-day-cell"][data-date="15"]');
+            if (dayCell) {
+                dayCell.click();
+            } else {
+                const fallbackCell = document.querySelector('div[data-qa="calendar-day-cell"]');
+                if (fallbackCell) fallbackCell.click();
+            }
+        });
+        await delay(1500); // Wait for transition and schedule recalculation
+
+        // 5. Verify the updated schedule on main screen
+        console.log('5. Verifying applied schedule...');
+        await captureAndLog('qa_7_main_schedule_applied.png');
+
+        // 6. Re-open settings to check push/theme configuration
+        console.log('6. Re-opening Settings Modal to check configurations...');
+        const settingsBtnFinal = await page.$('button[title="설정"]');
+        if (settingsBtnFinal) {
+            await page.evaluate((btn) => btn.click(), settingsBtnFinal);
             await delay(1500);
         }
 
         await captureAndLog('qa_8_settings_push_only.png');
 
-        // Close Settings modal
+        // Close Settings Modal
         console.log('Closing Settings modal...');
         await page.evaluate(() => {
             const btns = Array.from(document.querySelectorAll('button'));
-            const confirmBtn = btns.find(b => b.textContent.includes('✕') || b.textContent.includes('확인'));
-            if (confirmBtn) confirmBtn.click();
+            const closeBtn = btns.find(b => b.textContent.includes('✕') || b.textContent.includes('확인'));
+            if (closeBtn) closeBtn.click();
         });
         await delay(1000);
-
-        // Verify applied schedule on main screen
-        await captureAndLog('qa_7_main_schedule_applied.png');
 
     } catch (e) {
         console.error('Fatal error during E2E QA run:', e);

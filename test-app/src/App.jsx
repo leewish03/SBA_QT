@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import styled, { createGlobalStyle, ThemeProvider } from 'styled-components';
 import './SBA_QT.css';
 
-import { getMidnightKST, FULL_TO_SHORT, DAYS_ARR, getEffectiveDate, safeToISODateString } from './utils/bibleLogic';
+import { getMidnightKST, FULL_TO_SHORT, DAYS_ARR, getEffectiveDate, safeToISODateString, calcQtDays } from './utils/bibleLogic';
 import { TopHeader, BottomNav, AppFooter } from './components/NavComponents';
 import { TabToday, TabReading, TabBookmarks, SharingTab } from './components/TabComponents';
 import { TabWeekly, SettingsModal, CalendarModal, AuthModal } from './components/WeeklyAndModals';
@@ -350,6 +350,17 @@ export default function App() {
     const [currentDate, setCurrentDate] = useState(getEffectiveDate());
     const [activeTab, setActiveTab] = useState('today');
 
+    // 묵상 기준일 상태 (구글 시트 연동 시 날짜 계산 오프셋용)
+    const [startDateStr, setStartDateStr] = useState(() => {
+        return localStorage.getItem('sba_qt_start_date') || '2026-01-01';
+    });
+
+    const handleSetStartDateStr = (val) => {
+        setStartDateStr(val);
+        localStorage.setItem('sba_qt_start_date', val);
+        addToast("묵상 기준일이 변경되었습니다.");
+    };
+
     // 뒤로가기(popstate) 제어용 상태
     const [isPopStateActive, setIsPopStateActive] = useState(false);
     const loadDateStrRef = React.useRef(safeToISODateString(getEffectiveDate()));
@@ -664,26 +675,22 @@ export default function App() {
         return () => clearInterval(timer);
     }, [session, setActiveTab]);
 
-    // 스케줄 데이터 로딩 함수 (백엔드 API 연동)
+    // 스케줄 데이터 로딩 함수 (구글 시트 연동 및 로컬 폴백)
     const loadSchedule = async () => {
-        if (!userChurch) return;
         setLoading(true);
         setError(null);
         try {
-            const year = currentDate.getFullYear();
-            const startDate = `${year}-01-01`;
-            const endDate = `${year}-12-31`;
-
-            const headers = {};
-            if (session?.access_token) {
-                headers['Authorization'] = `Bearer ${session.access_token}`;
-            }
-
-            const data = await fetchWithRetry(`/api/qt-schedule?church_id=${userChurch.id}&start_date=${startDate}&end_date=${endDate}`, { headers });
+            const data = await fetchWithRetry('/api/sba-qt');
             setScheduleData(data);
         } catch (err) {
-            console.error("일정 불러오기 실패:", err);
-            setError("일정 데이터를 불러오지 못했습니다. 관리자에게 문의해 주세요.");
+            console.warn("백엔드 API 호출 실패, 로컬 폴백 데이터를 로드합니다.", err);
+            try {
+                const fallbackData = await fetchWithRetry('/fallback_schedule.json');
+                setScheduleData(fallbackData);
+            } catch (fallbackErr) {
+                console.error("폴백 데이터 로드 실패:", fallbackErr);
+                setError("일정 데이터를 불러오지 못했습니다. 네트워크 연결을 확인해 주세요.");
+            }
         } finally {
             setLoading(false);
         }
@@ -784,50 +791,70 @@ export default function App() {
 
     const weekDayIdx = targetKST.getUTCDay();
 
-    // 주간 7일간의 일정 계산
+    // 주간 7일간의 일정 계산 (구글 시트 연동 방식)
     const dailyPlans = useMemo(() => {
-        if (!scheduleData) return {};
+        if (!scheduleData || !scheduleData.qt_plan || !scheduleData.reading_plan) return {};
         
         const diffToMonday = weekDayIdx === 0 ? -6 : 1 - weekDayIdx;
         const plans = {};
+        const parsedStartDate = new Date(startDateStr);
+        const startKST = getMidnightKST(
+            parsedStartDate instanceof Date && !isNaN(parsedStartDate.getTime()) 
+                ? parsedStartDate 
+                : new Date('2026-01-01')
+        );
 
         for (let i = 0; i < 7; i++) {
             const d = new Date(targetKST.getTime());
             d.setUTCDate(targetKST.getUTCDate() + diffToMonday + i);
             
-            const dateStr = d.toISOString().split('T')[0];
             const dMonth = d.getUTCMonth() + 1;
             const dDay = d.getUTCDate();
             const dKey = `${String(dMonth).padStart(2, '0')}.${String(dDay).padStart(2, '0')}`;
             const dayName = DAYS_ARR[d.getUTCDay()];
             
-            const row = scheduleData.find(s => s.date === dateStr);
-            
             let oldPlan = null;
             let newPlan = null;
 
-            if (row) {
-                if (row.qt_book) {
-                    oldPlan = {
-                        abbrev: row.qt_book,
-                        verse: row.qt_start_chap?.toString() || "1",
-                        start_verse: row.qt_start_verse || 1,
-                        end_verse: row.qt_end_verse || 30,
-                        title: row.qt_title || ""
-                    };
-                }
-                if (row.reading_book) {
-                    newPlan = {
-                        books: [row.reading_book],
-                        verseRaw: `${row.reading_start_chap}-${row.reading_end_chap}`
-                    };
+            if (dayName !== "일요일") {
+                const daysElapsed = calcQtDays(startKST, d);
+                if (daysElapsed > 0) {
+                    let count = 0;
+                    for (const row of scheduleData.qt_plan) {
+                        const sp = parseInt(row.start_paragraph);
+                        const ep = parseInt(row.end_paragraph);
+                        const paras = ep - sp + 1;
+                        if (count + paras >= daysElapsed) {
+                            const verse = sp + (daysElapsed - count - 1);
+                            oldPlan = { 
+                                abbrev: FULL_TO_SHORT[row.chapter] || row.chapter, 
+                                verse: verse.toString(),
+                                start_verse: 1,
+                                end_verse: 30, // 기본값
+                                title: `${row.chapter} ${verse}장`
+                            };
+                            break;
+                        }
+                        count += paras;
+                    }
                 }
             }
 
-            plans[dKey] = { dayName, old: oldPlan, new: newPlan, dateObj: d, rawRow: row };
+            const readingRow = scheduleData.reading_plan.find(r => 
+                parseInt(r.month) === dMonth && parseInt(r.day) === dDay
+            );
+
+            if (readingRow && readingRow.chapter !== "없음" && readingRow.verse !== "없음") {
+                newPlan = { 
+                    books: readingRow.chapter.replace(/"/g,'').split(',').map(b => b.trim()), 
+                    verseRaw: readingRow.verse 
+                };
+            }
+
+            plans[dKey] = { dayName, old: oldPlan, new: newPlan, dateObj: d };
         }
         return plans;
-    }, [scheduleData, targetKST, weekDayIdx]);
+    }, [scheduleData, targetKST, startDateStr, weekDayIdx]);
 
     const handleWeekCardClick = (dateObj) => {
         if (dateObj instanceof Date && !isNaN(dateObj.getTime())) {
@@ -843,7 +870,7 @@ export default function App() {
         setShowCalendar(false);
     };
 
-    // 북마크 구절 클릭 시 해당 일정 날짜/탭 역추적 및 포커싱 이동
+    // 북마크 구절 클릭 시 해당 일정 날짜/탭 역추적 및 포커싱 이동 (구글 시트 연동 방식)
     const handleNavigateToVerse = (book, chapter, verse) => {
         let targetDateObj = new Date();
         let targetTab = 'today';
@@ -851,28 +878,51 @@ export default function App() {
 
         if (scheduleData) {
             // 1. 묵상(QT)에서 검색
-            const qtMatch = scheduleData.find(s => 
-                s.qt_book === book && 
-                s.qt_start_chap <= chapter && chapter <= s.qt_end_chap
+            const parsedStartDate = new Date(startDateStr);
+            const startKST = getMidnightKST(
+                parsedStartDate instanceof Date && !isNaN(parsedStartDate.getTime()) 
+                    ? parsedStartDate 
+                    : new Date('2026-01-01')
             );
-            if (qtMatch) {
-                const parts = qtMatch.date.split('-');
-                targetDateObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-                targetTab = 'today';
-                found = true;
+            
+            if (startKST instanceof Date && !isNaN(startKST.getTime())) {
+                let count = 0;
+                for (const row of scheduleData.qt_plan) {
+                    const sp = parseInt(row.start_paragraph);
+                    const ep = parseInt(row.end_paragraph);
+                    const paras = ep - sp + 1;
+                    const rowBook = FULL_TO_SHORT[row.chapter] || row.chapter;
+                    
+                    if (rowBook === book && sp <= chapter && chapter <= ep) {
+                        const daysElapsed = count + (chapter - sp) + 1;
+                        const d = new Date(startKST.getTime());
+                        d.setUTCDate(startKST.getUTCDate() + daysElapsed);
+                        if (d instanceof Date && !isNaN(d.getTime())) {
+                            targetDateObj = d;
+                            targetTab = 'today';
+                            found = true;
+                        }
+                        break;
+                    }
+                    count += paras;
+                }
             }
 
-            // 2. 통독에서 검색 (묵상에서 발견되지 않은 경우)
-            if (!found) {
-                const rdMatch = scheduleData.find(s => 
-                    s.reading_book === book && 
-                    s.reading_start_chap <= chapter && chapter <= s.reading_end_chap
-                );
-                if (rdMatch) {
-                    const parts = rdMatch.date.split('-');
-                    targetDateObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-                    targetTab = 'reading';
-                    found = true;
+            // 2. 통독 계획에서 검색 (묵상에서 발견되지 않은 경우)
+            if (!found && scheduleData.reading_plan) {
+                for (const row of scheduleData.reading_plan) {
+                    const books = row.chapter.replace(/"/g,'').split(',').map(b => b.trim());
+                    if (books.includes(book)) {
+                        const d = getMidnightKST(new Date());
+                        d.setUTCMonth(parseInt(row.month) - 1);
+                        d.setUTCDate(parseInt(row.day));
+                        if (d instanceof Date && !isNaN(d.getTime())) {
+                            targetDateObj = d;
+                            targetTab = 'reading';
+                            found = true;
+                        }
+                        break;
+                    }
                 }
             }
         }
@@ -1131,6 +1181,8 @@ export default function App() {
                     setUserChurch={setUserChurch}
                     scheduleData={scheduleData}
                     loadSchedule={loadSchedule}
+                    startDateStr={startDateStr}
+                    setStartDateStr={handleSetStartDateStr}
                 />
 
                 <AuthModal

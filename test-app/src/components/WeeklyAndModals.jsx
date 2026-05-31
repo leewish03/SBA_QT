@@ -365,8 +365,7 @@ const FontSizeVal = styled.span`
   text-align: center;
 `;
 
-export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, session, userChurch, setUserChurch, scheduleData, loadSchedule }) {
-    const [activeSubTab, setActiveSubTab] = useState('settings'); // 'settings' | 'admin_generate' | 'admin_edit'
+export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, session, userChurch, setUserChurch, scheduleData, loadSchedule, startDateStr, setStartDateStr }) {
     const [syncing, setSyncing] = useState(false);
     const [stats, setStats] = useState({ bookmarks: 0, notes: 0 });
     const [fontSize, setFontSize] = useState(() => {
@@ -383,28 +382,12 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
     });
     const [isTesting, setIsTesting] = useState(false);
 
+    // Purge 관리자 토큰 상태 정의
+    const [token, setToken] = useState(() => {
+        return localStorage.getItem('sba_qt_admin_token') || 'sba_qt_admin_secret_token';
+    });
+
     const [alarmHour, alarmMinute] = alarmTime.split(':');
-
-    // 1. 일정 자동 생성용 상태
-    const [genStartDate, setGenStartDate] = useState(safeToISODateString(getEffectiveDate()));
-    const [genStartBook, setGenStartBook] = useState('GEN');
-    const [genStartChap, setGenStartChap] = useState(1);
-    const [genEndBook, setGenEndBook] = useState('REV');
-    const [genEndChap, setGenEndChap] = useState(22);
-    const [genPagesPerDay, setGenPagesPerDay] = useState(1);
-    const [genExcludeDays, setGenExcludeDays] = useState([0]); // 기본 일요일 제외
-
-    // 2. 일정 수동 수정용 상태
-    const [editDate, setEditDate] = useState(safeToISODateString(getEffectiveDate()));
-    const [editQtBook, setEditQtBook] = useState('');
-    const [editQtStartChap, setEditQtStartChap] = useState(1);
-    const [editQtStartVerse, setEditQtStartVerse] = useState(1);
-    const [editQtEndChap, setEditQtEndChap] = useState(1);
-    const [editQtEndVerse, setEditQtEndVerse] = useState(30);
-    const [editQtTitle, setEditQtTitle] = useState('');
-    const [editReadingBook, setEditReadingBook] = useState('');
-    const [editReadingStartChap, setEditReadingStartChap] = useState(1);
-    const [editReadingEndChap, setEditReadingEndChap] = useState(1);
 
     const urlBase64ToUint8Array = (base64String) => {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -474,40 +457,11 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
     useEffect(() => {
         if (isOpen) {
             loadStats();
-            setActiveSubTab('settings');
             if (session) {
                 checkPushSubscriptionStatus();
             }
         }
     }, [isOpen, session]);
-
-    // 날짜 변경 시 해당 날짜의 일정을 찾아서 수동 폼 채우기
-    useEffect(() => {
-        if (scheduleData && editDate) {
-            const row = scheduleData.find(s => s.date === editDate);
-            if (row) {
-                setEditQtBook(row.qt_book || '');
-                setEditQtStartChap(row.qt_start_chap || 1);
-                setEditQtStartVerse(row.qt_start_verse || 1);
-                setEditQtEndChap(row.qt_end_chap || 1);
-                setEditQtEndVerse(row.qt_end_verse || 30);
-                setEditQtTitle(row.qt_title || '');
-                setEditReadingBook(row.reading_book || '');
-                setEditReadingStartChap(row.reading_start_chap || 1);
-                setEditReadingEndChap(row.reading_end_chap || 1);
-            } else {
-                setEditQtBook('');
-                setEditQtStartChap(1);
-                setEditQtStartVerse(1);
-                setEditQtEndChap(1);
-                setEditQtEndVerse(30);
-                setEditQtTitle('');
-                setEditReadingBook('');
-                setEditReadingStartChap(1);
-                setEditReadingEndChap(1);
-            }
-        }
-    }, [editDate, scheduleData]);
 
     const handleAlarmToggle = async (e) => {
         const checked = e.target.checked;
@@ -662,81 +616,31 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
         }
     };
 
-    // 관리자 일정 자동 생성 요청
-    const handleGenerateSchedule = async () => {
-        if (!window.confirm('기존 일정이 있는 날짜는 덮어씌워집니다. 계속하시겠습니까?')) return;
+    // 구글 스프레드시트 즉시 동기화 (Purge) 요청
+    const handleSync = async () => {
         setSyncing(true);
         try {
-            const headers = { 'Content-Type': 'application/json' };
+            localStorage.setItem('sba_qt_admin_token', token);
+            const headers = {};
             if (session?.access_token) {
                 headers['Authorization'] = `Bearer ${session.access_token}`;
             }
-            const res = await fetch('/api/qt-schedule/generate', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    church_id: userChurch.id,
-                    start_date: genStartDate,
-                    start_book: genStartBook,
-                    start_chap: genStartChap,
-                    end_book: genEndBook,
-                    end_chap: genEndChap,
-                    pages_per_day: genPagesPerDay,
-                    exclude_days: genExcludeDays
-                })
-            });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                addToast(data.message);
+            const res = await fetch(`/api/sba-qt?purge=true&token=${token}`, { headers });
+            if (res.ok) {
+                addToast('구글 스프레드시트 데이터가 즉시 강제 갱신(Purge)되었습니다.');
                 if (loadSchedule) loadSchedule();
-                setActiveSubTab('settings');
+                onClose();
             } else {
-                throw new Error(data.error || '생성 실패');
+                let errText = '알 수 없는 오류';
+                try {
+                    const errData = await res.json();
+                    errText = errData.error || errText;
+                } catch (e) {}
+                alert(`동기화 실패: ${errText}`);
             }
-        } catch (err) {
-            alert('일정 자동 생성 실패: ' + err.message);
-        } finally {
-            setSyncing(false);
-        }
-    };
-
-    // 관리자 일정 수동 단일 저장 요청
-    const handleUpdateSchedule = async () => {
-        setSyncing(true);
-        try {
-            const headers = { 'Content-Type': 'application/json' };
-            if (session?.access_token) {
-                headers['Authorization'] = `Bearer ${session.access_token}`;
-            }
-            const existing = scheduleData?.find(s => s.date === editDate);
-            const res = await fetch('/api/qt-schedule/update', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    id: existing?.id || null,
-                    church_id: userChurch.id,
-                    date: editDate,
-                    qt_book: editQtBook || null,
-                    qt_start_chap: editQtStartChap || null,
-                    qt_start_verse: editQtStartVerse || null,
-                    qt_end_chap: editQtEndChap || null,
-                    qt_end_verse: editQtEndVerse || null,
-                    qt_title: editQtTitle || null,
-                    reading_book: editReadingBook || null,
-                    reading_start_chap: editReadingStartChap || null,
-                    reading_end_chap: editReadingEndChap || null
-                })
-            });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                addToast('일정이 성공적으로 저장되었습니다.');
-                if (loadSchedule) loadSchedule();
-                setActiveSubTab('settings');
-            } else {
-                throw new Error(data.error || '저장 실패');
-            }
-        } catch (err) {
-            alert('일정 저장 실패: ' + err.message);
+        } catch (e) {
+            console.error(e);
+            alert('API 호출 도중 오류가 발생했습니다.');
         } finally {
             setSyncing(false);
         }
@@ -750,6 +654,7 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
         localStorage.removeItem('sba_qt_alarm_enabled');
         localStorage.removeItem('sba_qt_alarm_time');
         localStorage.removeItem('sba_qt_last_notified_date');
+        localStorage.removeItem('sba_qt_start_date');
         addToast('로컬 데이터가 완전히 초기화되었습니다.');
         window.location.reload();
     };
@@ -757,390 +662,191 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
     return (
         <ModalOverlay onClick={onClose}>
             <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '95%' }}>
-                {activeSubTab === 'settings' && (
-                    <>
-                        <ModalHeader>
-                            <ModalTitle>설정 (Settings)</ModalTitle>
-                            <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
-                        </ModalHeader>
-                        
-                        {/* 소속 교회 정보 */}
-                        {userChurch && (
-                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '16px', border: '1px solid var(--sba-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                    <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-secondary)', fontWeight: 'bold' }}>소속 교회</span>
-                                    <span style={{ fontSize: '0.9rem', color: 'var(--sba-text)', fontWeight: '700' }}>
-                                        {userChurch.name} ({userChurch.role === 'admin' ? '관리자' : '지체'})
-                                    </span>
-                                </div>
-                                <ShadButton $variant="outline" onClick={handleLeaveChurch} style={{ flex: 'none', padding: '6px 12px', fontSize: '0.75rem', borderColor: '#ef4444', color: '#ef4444' }}>
-                                    탈퇴하기
-                                </ShadButton>
-                            </div>
-                        )}
+                <ModalHeader>
+                    <ModalTitle>설정 (Settings)</ModalTitle>
+                    <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                </ModalHeader>
+                
+                {/* 소속 교회 정보 */}
+                {userChurch && (
+                    <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '16px', border: '1px solid var(--sba-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-secondary)', fontWeight: 'bold' }}>소속 교회</span>
+                            <span style={{ fontSize: '0.9rem', color: 'var(--sba-text)', fontWeight: '700' }}>
+                                {userChurch.name} ({userChurch.role === 'admin' ? '관리자' : '지체'})
+                            </span>
+                        </div>
+                        <ShadButton $variant="outline" onClick={handleLeaveChurch} style={{ flex: 'none', padding: '6px 12px', fontSize: '0.75rem', borderColor: '#ef4444', color: '#ef4444' }}>
+                            탈퇴하기
+                        </ShadButton>
+                    </div>
+                )}
 
-                        {/* 다크모드 설정 */}
-                        <SettingRow>
-                            <SettingLabel>다크 테마 (Dark Mode)</SettingLabel>
+                {/* 다크모드 설정 */}
+                <SettingRow>
+                    <SettingLabel>다크 테마 (Dark Mode)</SettingLabel>
+                    <SettingControl>
+                        <SwitchContainer>
+                            <SwitchInput 
+                                type="checkbox" 
+                                checked={isDark} 
+                                onChange={e => setIsDark(e.target.checked)} 
+                            />
+                            <SwitchSlider $checked={isDark} />
+                        </SwitchContainer>
+                    </SettingControl>
+                </SettingRow>
+
+                {/* 글자 크기 설정 */}
+                <SettingRow>
+                    <SettingLabel>글자 크기 (Font Size)</SettingLabel>
+                    <SettingControl>
+                        <FontSizeBtn onClick={() => changeFontSize(-1.6)}>A-</FontSizeBtn>
+                        <FontSizeVal>{fontSize.toFixed(1)}px</FontSizeVal>
+                        <FontSizeBtn onClick={() => changeFontSize(1.6)}>A+</FontSizeBtn>
+                    </SettingControl>
+                </SettingRow>
+
+                {/* 매일 말씀 알림 설정 */}
+                <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
+                        <b>매일 말씀 알림 설정</b>
+                    </p>
+                    
+                    <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--sba-border)' }}>
+                        <SettingRow style={{ borderBottom: 'none', padding: '0 0 8px 0', margin: 0 }}>
+                            <SettingLabel style={{ fontSize: '0.85rem' }}>브라우저 알림 수신</SettingLabel>
                             <SettingControl>
                                 <SwitchContainer>
                                     <SwitchInput 
                                         type="checkbox" 
-                                        checked={isDark} 
-                                        onChange={e => setIsDark(e.target.checked)} 
+                                        checked={alarmEnabled} 
+                                        onChange={handleAlarmToggle} 
                                     />
-                                    <SwitchSlider $checked={isDark} />
+                                    <SwitchSlider $checked={alarmEnabled} />
                                 </SwitchContainer>
                             </SettingControl>
                         </SettingRow>
-
-                        {/* 글자 크기 설정 */}
-                        <SettingRow>
-                            <SettingLabel>글자 크기 (Font Size)</SettingLabel>
-                            <SettingControl>
-                                <FontSizeBtn onClick={() => changeFontSize(-1.6)}>A-</FontSizeBtn>
-                                <FontSizeVal>{fontSize.toFixed(1)}px</FontSizeVal>
-                                <FontSizeBtn onClick={() => changeFontSize(1.6)}>A+</FontSizeBtn>
-                            </SettingControl>
-                        </SettingRow>
-
-                        {/* 매일 말씀 알림 설정 */}
-                        <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
-                            <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
-                                <b>매일 말씀 알림 설정</b>
-                            </p>
-                            
-                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--sba-border)' }}>
-                                <SettingRow style={{ borderBottom: 'none', padding: '0 0 8px 0', margin: 0 }}>
-                                    <SettingLabel style={{ fontSize: '0.85rem' }}>브라우저 알림 수신</SettingLabel>
-                                    <SettingControl>
-                                        <SwitchContainer>
-                                            <SwitchInput 
-                                                type="checkbox" 
-                                                checked={alarmEnabled} 
-                                                onChange={handleAlarmToggle} 
-                                            />
-                                            <SwitchSlider $checked={alarmEnabled} />
-                                        </SwitchContainer>
-                                    </SettingControl>
-                                </SettingRow>
-                                {alarmEnabled && (
-                                    <SettingRow style={{ borderBottom: 'none', padding: '8px 0 0 0', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <SettingLabel style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--sba-text-secondary)' }}>알림 시간</SettingLabel>
-                                        <SettingControl style={{ gap: '6px' }}>
-                                            <select 
-                                                value={alarmHour} 
-                                                onChange={(e) => handleAlarmTimeChange(e.target.value, alarmMinute)}
-                                                style={{
-                                                    padding: '4px 8px',
-                                                    borderRadius: '6px',
-                                                    border: '1px solid var(--sba-border-strong)',
-                                                    background: 'var(--sba-card-bg)',
-                                                    color: 'var(--sba-text)',
-                                                    fontSize: '0.8rem'
-                                                }}
-                                            >
-                                                {Array.from({ length: 24 }).map((_, i) => {
-                                                    const h = String(i).padStart(2, '0');
-                                                    return <option key={h} value={h}>{h}시</option>;
-                                                })}
-                                            </select>
-                                            <select 
-                                                value={alarmMinute} 
-                                                onChange={(e) => handleAlarmTimeChange(alarmHour, e.target.value)}
-                                                style={{
-                                                    padding: '4px 8px',
-                                                    borderRadius: '6px',
-                                                    border: '1px solid var(--sba-border-strong)',
-                                                    background: 'var(--sba-card-bg)',
-                                                    color: 'var(--sba-text)',
-                                                    fontSize: '0.8rem'
-                                                }}
-                                            >
-                                                {Array.from({ length: 12 }).map((_, i) => {
-                                                    const m = String(i * 5).padStart(2, '0');
-                                                    return <option key={m} value={m}>{m}분</option>;
-                                                })}
-                                            </select>
-                                        </SettingControl>
-                                    </SettingRow>
-                                )}
-                                <p style={{ fontSize: '0.7rem', color: 'var(--sba-text-muted)', margin: '6px 0 0 0', lineHeight: '1.4' }}>
-                                    ※ 화면이 꺼져도 수신됩니다. iOS는 '홈 화면에 추가(PWA)'한 경우에만 수신 가능합니다.
-                                </p>
-                            </div>
-
-                            {/* 알림 즉시 테스트 버튼 */}
-                            {alarmEnabled && (
-                                <button 
-                                    onClick={handleTestNotification}
-                                    disabled={isTesting}
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px',
-                                        fontSize: '0.85rem',
-                                        border: '1px solid var(--sba-border-strong)',
-                                        borderRadius: '8px',
-                                        background: 'transparent',
-                                        color: 'var(--sba-text)',
-                                        cursor: 'pointer',
-                                        fontWeight: '600',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '6px',
-                                        transition: 'background-color 0.2s',
-                                        marginTop: '4px'
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--sba-card-sub-bg)'}
-                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                >
-                                    {isTesting ? '테스트 발송 중...' : '알림 즉시 테스트하기'}
-                                </button>
-                            )}
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px', borderTop: '1px solid var(--sba-border)', paddingTop: '12px' }}>
-                            <span>북마크: {stats.bookmarks}개 | 메모: {stats.notes}개</span>
-                            <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 데이터 초기화</DeleteTextButton>
-                        </div>
-
-                        {/* 교회 관리자용 대시보드 버튼 */}
-                        {isAdmin && (
-                            <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
-                                <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
-                                    <b>교회 관리자 대시보드</b>
-                                </p>
-                                <ButtonGroup style={{ display: 'flex', gap: '8px' }}>
-                                    <ShadButton onClick={() => setActiveSubTab('admin_generate')} $variant="accent">
-                                        일정 자동 생성기
-                                    </ShadButton>
-                                    <ShadButton onClick={() => setActiveSubTab('admin_edit')} $variant="outline">
-                                        일정 달력 수동 수정
-                                    </ShadButton>
-                                </ButtonGroup>
-                            </div>
+                        {alarmEnabled && (
+                            <SettingRow style={{ borderBottom: 'none', padding: '8px 0 0 0', margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <SettingLabel style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--sba-text-secondary)' }}>알림 시간</SettingLabel>
+                                <SettingControl style={{ gap: '6px' }}>
+                                    <select 
+                                        value={alarmHour} 
+                                        onChange={(e) => handleAlarmTimeChange(e.target.value, alarmMinute)}
+                                        style={{
+                                            padding: '4px 8px',
+                                            borderRadius: '6px',
+                                            border: '1px solid var(--sba-border-strong)',
+                                            background: 'var(--sba-card-bg)',
+                                            color: 'var(--sba-text)',
+                                            fontSize: '0.8rem'
+                                        }}
+                                    >
+                                        {Array.from({ length: 24 }).map((_, i) => {
+                                            const h = String(i).padStart(2, '0');
+                                            return <option key={h} value={h}>{h}시</option>;
+                                        })}
+                                    </select>
+                                    <select 
+                                        value={alarmMinute} 
+                                        onChange={(e) => handleAlarmTimeChange(alarmHour, e.target.value)}
+                                        style={{
+                                            padding: '4px 8px',
+                                            borderRadius: '6px',
+                                            border: '1px solid var(--sba-border-strong)',
+                                            background: 'var(--sba-card-bg)',
+                                            color: 'var(--sba-text)',
+                                            fontSize: '0.8rem'
+                                        }}
+                                    >
+                                        {Array.from({ length: 12 }).map((_, i) => {
+                                            const m = String(i * 5).padStart(2, '0');
+                                            return <option key={m} value={m}>{m}분</option>;
+                                        })}
+                                    </select>
+                                </SettingControl>
+                            </SettingRow>
                         )}
-                        
-                        <ButtonGroup style={{ marginTop: '20px' }}>
-                            <ShadButton onClick={onClose}>
-                                확인
+                        <p style={{ fontSize: '0.7rem', color: 'var(--sba-text-muted)', margin: '6px 0 0 0', lineHeight: '1.4' }}>
+                            ※ 화면이 꺼져도 수신됩니다. iOS는 '홈 화면에 추가(PWA)'한 경우에만 수신 가능합니다.
+                        </p>
+                    </div>
+
+                    {/* 알림 즉시 테스트 버튼 */}
+                    {alarmEnabled && (
+                        <button 
+                            onClick={handleTestNotification}
+                            disabled={isTesting}
+                            style={{
+                                width: '100%',
+                                padding: '10px',
+                                fontSize: '0.85rem',
+                                border: '1px solid var(--sba-border-strong)',
+                                borderRadius: '8px',
+                                background: 'transparent',
+                                color: 'var(--sba-text)',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                transition: 'background-color 0.2s',
+                                marginTop: '4px'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--sba-card-sub-bg)'}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                            {isTesting ? '테스트 발송 중...' : '알림 즉시 테스트하기'}
+                        </button>
+                    )}
+                </div>
+
+                {/* 묵상 시작 기준일 설정 */}
+                <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
+                    <FormGroup>
+                        <FormLabel>묵상 기준일 설정 (startDateStr)</FormLabel>
+                        <FormInput 
+                            type="date" 
+                            value={startDateStr}
+                            onChange={e => setStartDateStr(e.target.value)}
+                        />
+                    </FormGroup>
+                </div>
+
+                {/* 교회 관리자용 대시보드 버튼 */}
+                {isAdmin && (
+                    <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--sba-text-secondary)', margin: '0 0 12px 0' }}>
+                            <b>교회 관리자 대시보드</b>
+                        </p>
+                        <FormGroup>
+                            <FormLabel>Purge 관리자 토큰</FormLabel>
+                            <FormInput 
+                                type="password" 
+                                value={token} 
+                                onChange={e => setToken(e.target.value)}
+                            />
+                        </FormGroup>
+                        <ButtonGroup style={{ display: 'flex', gap: '8px' }}>
+                            <ShadButton onClick={handleSync} disabled={syncing} $variant="accent">
+                                {syncing ? '구글 시트 최신화 중...' : '구글 스프레드시트 캐시 갱신 (Purge)'}
                             </ShadButton>
                         </ButtonGroup>
-                    </>
+                    </div>
                 )}
 
-                {activeSubTab === 'admin_generate' && (
-                    <>
-                        <ModalHeader>
-                            <ModalTitle>일정 자동 생성기</ModalTitle>
-                            <ModalCloseButton onClick={() => setActiveSubTab('settings')}>✕</ModalCloseButton>
-                        </ModalHeader>
-                        
-                        <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '4px' }}>
-                            <FormGroup>
-                                <FormLabel>큐티 일정 시작 날짜</FormLabel>
-                                <FormInput 
-                                    type="date" 
-                                    value={genStartDate}
-                                    onChange={e => setGenStartDate(e.target.value)}
-                                />
-                            </FormGroup>
-
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <FormGroup style={{ flex: 1 }}>
-                                    <FormLabel>시작 성경</FormLabel>
-                                    <select 
-                                        value={genStartBook} 
-                                        onChange={e => setGenStartBook(e.target.value)}
-                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
-                                    >
-                                        {BIBLE_BOOKS.map(b => (
-                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
-                                        ))}
-                                    </select>
-                                </FormGroup>
-                                <FormGroup style={{ flex: 1 }}>
-                                    <FormLabel>시작 장</FormLabel>
-                                    <FormInput 
-                                        type="number" 
-                                        min="1" 
-                                        value={genStartChap}
-                                        onChange={e => setGenStartChap(parseInt(e.target.value) || 1)}
-                                    />
-                                </FormGroup>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <FormGroup style={{ flex: 1 }}>
-                                    <FormLabel>종료 성경</FormLabel>
-                                    <select 
-                                        value={genEndBook} 
-                                        onChange={e => setGenEndBook(e.target.value)}
-                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
-                                    >
-                                        {BIBLE_BOOKS.map(b => (
-                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
-                                        ))}
-                                    </select>
-                                </FormGroup>
-                                <FormGroup style={{ flex: 1 }}>
-                                    <FormLabel>종료 장</FormLabel>
-                                    <FormInput 
-                                        type="number" 
-                                        min="1" 
-                                        value={genEndChap}
-                                        onChange={e => setGenEndChap(parseInt(e.target.value) || 1)}
-                                    />
-                                </FormGroup>
-                            </div>
-
-                            <FormGroup>
-                                <FormLabel>하루당 진행할 분량 (장수)</FormLabel>
-                                <FormInput 
-                                    type="number" 
-                                    min="1" 
-                                    value={genPagesPerDay}
-                                    onChange={e => setGenPagesPerDay(parseInt(e.target.value) || 1)}
-                                />
-                            </FormGroup>
-
-                            <FormGroup>
-                                <FormLabel>제외할 요일 선택</FormLabel>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginTop: '6px' }}>
-                                    {['일', '월', '화', '수', '목', '금', '토'].map((day, idx) => (
-                                        <label key={day} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', cursor: 'pointer' }}>
-                                            <input 
-                                                type="checkbox" 
-                                                checked={genExcludeDays.includes(idx)}
-                                                onChange={e => {
-                                                    if (e.target.checked) {
-                                                        setGenExcludeDays([...genExcludeDays, idx]);
-                                                    } else {
-                                                        setGenExcludeDays(genExcludeDays.filter(d => d !== idx));
-                                                    }
-                                                }}
-                                            />
-                                            {day}요일
-                                        </label>
-                                    ))}
-                                </div>
-                            </FormGroup>
-                        </div>
-
-                        <ButtonGroup style={{ marginTop: '20px' }}>
-                            <ShadButton $variant="outline" onClick={() => setActiveSubTab('settings')}>
-                                취소
-                            </ShadButton>
-                            <ShadButton onClick={handleGenerateSchedule} disabled={syncing} $variant="accent">
-                                {syncing ? '생성 계산 중...' : '자동 생성 및 덮어쓰기'}
-                            </ShadButton>
-                        </ButtonGroup>
-                    </>
-                )}
-
-                {activeSubTab === 'admin_edit' && (
-                    <>
-                        <ModalHeader>
-                            <ModalTitle>일정 달력 수동 수정</ModalTitle>
-                            <ModalCloseButton onClick={() => setActiveSubTab('settings')}>✕</ModalCloseButton>
-                        </ModalHeader>
-                        
-                        <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '4px' }}>
-                            <FormGroup>
-                                <FormLabel>수정할 날짜 선택</FormLabel>
-                                <FormInput 
-                                    type="date" 
-                                    value={editDate}
-                                    onChange={e => setEditDate(e.target.value)}
-                                />
-                            </FormGroup>
-
-                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--sba-border)', marginBottom: '16px' }}>
-                                <p style={{ fontSize: '0.8rem', fontWeight: 'bold', margin: '0 0 10px 0', borderBottom: '1px solid var(--sba-border-strong)', paddingBottom: '4px' }}>1. 오늘의 묵상 (QT)</p>
-                                
-                                <FormGroup>
-                                    <FormLabel>묵상 성경 권</FormLabel>
-                                    <select 
-                                        value={editQtBook} 
-                                        onChange={e => setEditQtBook(e.target.value)}
-                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
-                                    >
-                                        <option value="">없음</option>
-                                        {BIBLE_BOOKS.map(b => (
-                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
-                                        ))}
-                                    </select>
-                                </FormGroup>
-
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <FormGroup style={{ flex: 1 }}>
-                                        <FormLabel>시작 장</FormLabel>
-                                        <FormInput type="number" min="1" value={editQtStartChap} onChange={e => setEditQtStartChap(parseInt(e.target.value) || 1)} />
-                                    </FormGroup>
-                                    <FormGroup style={{ flex: 1 }}>
-                                        <FormLabel>시작 절</FormLabel>
-                                        <FormInput type="number" min="1" value={editQtStartVerse} onChange={e => setEditQtStartVerse(parseInt(e.target.value) || 1)} />
-                                    </FormGroup>
-                                </div>
-
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <FormGroup style={{ flex: 1 }}>
-                                        <FormLabel>종료 장</FormLabel>
-                                        <FormInput type="number" min="1" value={editQtEndChap} onChange={e => setEditQtEndChap(parseInt(e.target.value) || 1)} />
-                                    </FormGroup>
-                                    <FormGroup style={{ flex: 1 }}>
-                                        <FormLabel>종료 절</FormLabel>
-                                        <FormInput type="number" min="1" value={editQtEndVerse} onChange={e => setEditQtEndVerse(parseInt(e.target.value) || 1)} />
-                                    </FormGroup>
-                                </div>
-
-                                <FormGroup>
-                                    <FormLabel>묵상 본문 제목</FormLabel>
-                                    <FormInput type="text" placeholder="예: 말씀으로 굳건히 서는 교회" value={editQtTitle} onChange={e => setEditQtTitle(e.target.value)} />
-                                </FormGroup>
-                            </div>
-
-                            <div style={{ background: 'var(--sba-card-sub-bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--sba-border)' }}>
-                                <p style={{ fontSize: '0.8rem', fontWeight: 'bold', margin: '0 0 10px 0', borderBottom: '1px solid var(--sba-border-strong)', paddingBottom: '4px' }}>2. 성경 통독 (Reading)</p>
-                                
-                                <FormGroup>
-                                    <FormLabel>통독 성경 권</FormLabel>
-                                    <select 
-                                        value={editReadingBook} 
-                                        onChange={e => setEditReadingBook(e.target.value)}
-                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--sba-border-strong)', background: 'var(--sba-bg)', color: 'var(--sba-text)' }}
-                                    >
-                                        <option value="">없음</option>
-                                        {BIBLE_BOOKS.map(b => (
-                                            <option key={b.eng} value={b.eng}>{b.kor}</option>
-                                        ))}
-                                    </select>
-                                </FormGroup>
-
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <FormGroup style={{ flex: 1 }}>
-                                        <FormLabel>시작 장</FormLabel>
-                                        <FormInput type="number" min="1" value={editReadingStartChap} onChange={e => setEditReadingStartChap(parseInt(e.target.value) || 1)} />
-                                    </FormGroup>
-                                    <FormGroup style={{ flex: 1 }}>
-                                        <FormLabel>종료 장</FormLabel>
-                                        <FormInput type="number" min="1" value={editReadingEndChap} onChange={e => setEditReadingEndChap(parseInt(e.target.value) || 1)} />
-                                    </FormGroup>
-                                </div>
-                            </div>
-                        </div>
-
-                        <ButtonGroup style={{ marginTop: '20px' }}>
-                            <ShadButton $variant="outline" onClick={() => setActiveSubTab('settings')}>
-                                취소
-                            </ShadButton>
-                            <ShadButton onClick={handleUpdateSchedule} disabled={syncing} $variant="accent">
-                                {syncing ? '저장 중...' : '일정 저장하기'}
-                            </ShadButton>
-                        </ButtonGroup>
-                    </>
-                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--sba-text-secondary)', margin: '16px 0 8px', borderTop: '1px solid var(--sba-border)', paddingTop: '12px' }}>
+                    <span>북마크: {stats.bookmarks}개 | 메모: {stats.notes}개</span>
+                    <DeleteTextButton style={{ color: 'var(--sba-text)' }} onClick={handleClearLocalCache}>로컬 데이터 초기화</DeleteTextButton>
+                </div>
+                
+                <ButtonGroup style={{ marginTop: '20px' }}>
+                    <ShadButton onClick={onClose}>
+                        확인
+                    </ShadButton>
+                </ButtonGroup>
             </ModalContent>
         </ModalOverlay>
     );
@@ -1405,6 +1111,8 @@ export function CalendarModal({ isOpen, onClose, currentDate, onSetDate, dailyPl
                                 return (
                                     <CalendarDayCell 
                                         key={dateStr}
+                                        data-qa="calendar-day-cell"
+                                        data-date={date.getDate()}
                                         onClick={() => handleSelectDate(date)}
                                         $isSelected={isSelected}
                                     >
