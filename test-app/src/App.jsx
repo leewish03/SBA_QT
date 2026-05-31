@@ -412,69 +412,195 @@ export default function App() {
 
     const theme = useMemo(() => getDynamicTheme(isDark, userChurch), [isDark, userChurch]);
 
-    // 소속 교회 확인 함수
-    const fetchUserChurch = async (userId) => {
+    // 소속 교회 확인 및 라우팅 처리 통합 함수
+    const handleRoutingAndLoad = async () => {
         setCheckingChurch(true);
         try {
-            const headers = { 'Content-Type': 'application/json' };
-            const authKey = 'sb-ebfpjvwwbognddixrvyc-auth-token';
-            const savedSession = localStorage.getItem(authKey);
-            if (savedSession) {
-                try {
-                    const parsed = JSON.parse(savedSession);
-                    if (parsed?.access_token) {
-                        headers['Authorization'] = `Bearer ${parsed.access_token}`;
-                    }
-                } catch (e) {}
+            // 1. 세션 복구
+            const { data: { session: curSession } } = await supabase.auth.getSession();
+            if (curSession) {
+                setSession(curSession);
             }
 
-            const res = await fetch('/api/churches/mine', {
-                method: 'GET',
-                headers
-            });
+            // 2. URL 경로 파싱
+            const pathParts = window.location.pathname.split('/').filter(Boolean);
+            const slug = pathParts[0] || '';
+
+            if (!slug) {
+                // 루트 (/) 진입 시 지능형 리다이렉션
+                if (curSession) {
+                    // 로그인 사용자 (1순위): 본인 소속 교회 조회
+                    const headers = { 'Content-Type': 'application/json' };
+                    const authKey = 'sb-ebfpjvwwbognddixrvyc-auth-token';
+                    const savedSession = localStorage.getItem(authKey);
+                    if (savedSession) {
+                        try {
+                            const parsed = JSON.parse(savedSession);
+                            if (parsed?.access_token) {
+                                headers['Authorization'] = `Bearer ${parsed.access_token}`;
+                            }
+                        } catch (e) {}
+                    }
+                    const res = await fetch('/api/churches/mine', { headers });
+                    if (res.ok) {
+                        const mine = await res.json();
+                        if (mine && mine.slug) {
+                            window.location.replace(`/${mine.slug}`);
+                            return;
+                        }
+                    }
+                }
+
+                // 비로그인 사용자 또는 소속 교회가 없는 로그인 사용자 (2순위): 로컬 캐시 조회
+                const lastVisited = localStorage.getItem('sba_last_visited_church');
+                if (lastVisited) {
+                    window.location.replace(`/${lastVisited}`);
+                    return;
+                }
+
+                // 최초 방문자 (3순위): 기본값으로 /seoul-north 리다이렉트
+                window.location.replace('/seoul-north');
+                return;
+            }
+
+            // 하위 경로 (/slug) 진입 시
+            const res = await fetch(`/api/churches?slug=${slug}`);
             if (!res.ok) {
                 throw new Error(`HTTP error! status: ${res.status}`);
             }
             const data = await res.json();
-            setUserChurch(data);
+            if (data && data.length > 0) {
+                let church = data[0];
+                setUserChurch(church);
+                localStorage.setItem('sba_last_visited_church', slug);
+
+                // 로그인된 사용자라면, 소속 교회 멤버십 연동 처리
+                if (curSession) {
+                    try {
+                        const headers = { 'Content-Type': 'application/json' };
+                        const authKey = 'sb-ebfpjvwwbognddixrvyc-auth-token';
+                        const savedSession = localStorage.getItem(authKey);
+                        if (savedSession) {
+                            try {
+                                const parsed = JSON.parse(savedSession);
+                                if (parsed?.access_token) {
+                                    headers['Authorization'] = `Bearer ${parsed.access_token}`;
+                                }
+                            } catch (e) {}
+                        }
+                        
+                        // 현재 가입된 교회가 있는지 조회
+                        const mineRes = await fetch('/api/churches/mine', { headers });
+                        let mine = mineRes.ok ? await mineRes.json() : null;
+
+                        // 소속이 없거나, 다른 교회인 경우 자동 가입(멤버십 연동) 및 동기화 수행
+                        if (!mine || mine.id !== church.id) {
+                            await fetch('/api/churches/join', {
+                                method: 'POST',
+                                headers: {
+                                    ...headers,
+                                    'Authorization': headers['Authorization'] || `Bearer ${curSession.access_token}`
+                                },
+                                body: JSON.stringify({ church_id: church.id })
+                            });
+                            addToast(`'${church.name}' 교회 소속으로 연동되었습니다.`);
+                            // 다시 mine을 불러와 role을 세팅
+                            const newMineRes = await fetch('/api/churches/mine', { headers });
+                            mine = newMineRes.ok ? await newMineRes.json() : null;
+                        }
+                        
+                        if (mine && mine.id === church.id) {
+                            setUserChurch({ ...church, role: mine.role });
+                        }
+                    } catch (err) {
+                        console.error('교회 멤버십 자동 연동 실패:', err);
+                    }
+                }
+            } else {
+                console.warn(`유효하지 않은 교회 슬러그: ${slug}. 서울북부교회로 이동합니다.`);
+                window.location.replace('/seoul-north');
+                return;
+            }
         } catch (err) {
-            console.error('교회 정보 조회 실패:', err);
+            console.error('라우팅 및 교회 로드 실패:', err);
             addToast('교회 정보를 불러오지 못했습니다.');
         } finally {
             setCheckingChurch(false);
         }
     };
 
-    // 1. Supabase Auth 상태 감지 및 세션 바인딩
-    useEffect(() => {
-        // 로컬스토리지 세션 즉시 복구 (E2E Mock 등 대응)
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) setSession(session);
-        });
+    // 소속 교회 확인 함수 (가입/개설 후 호출용)
+    const fetchUserChurch = async (userId) => {
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            const authKey = 'sb-ebfpjvwwbognddixrvyc-auth-token';
+            const savedSession = localStorage.getItem(authKey);
+            let token = session?.access_token;
+            if (savedSession) {
+                try {
+                    const parsed = JSON.parse(savedSession);
+                    if (parsed?.access_token) {
+                        token = parsed.access_token;
+                    }
+                } catch (e) {}
+            }
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
+            const mineRes = await fetch('/api/churches/mine', { headers });
+            if (mineRes.ok) {
+                const mine = await mineRes.json();
+                if (mine) {
+                    setUserChurch(mine);
+                    if (mine.slug) {
+                        localStorage.setItem('sba_last_visited_church', mine.slug);
+                        const pathParts = window.location.pathname.split('/').filter(Boolean);
+                        const curSlug = pathParts[0] || '';
+                        if (curSlug !== mine.slug) {
+                            window.location.replace(`/${mine.slug}`);
+                        }
+                    }
+                } else {
+                    setUserChurch(null);
+                }
+            }
+        } catch (err) {
+            console.error('fetchUserChurch error:', err);
+        }
+    };
+
+    // 마운트 시 최초 라우팅 및 세션 복구 수행
+    useEffect(() => {
+        handleRoutingAndLoad();
+    }, []);
+
+    // 1. Supabase Auth 상태 실시간 감지
+    useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, curSession) => {
+            setSession(curSession);
+            // 만약 로그인 이벤트라면 라우팅/멤버십 연동 재수행
+            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                handleRoutingAndLoad();
+            }
         });
         return () => subscription.unsubscribe();
     }, []);
 
-    // 2. 세션/사용자 ID 변화 시 정보 로드 및 1회 동기화 (중복 실행 완전 차단)
+    // 2. 세션 변화에 따른 데이터 동기화 관리
     useEffect(() => {
         if (!session) {
-            setUserChurch(null);
-            setCheckingChurch(false);
             lastSyncedUserRef.current = null;
             return;
         }
 
         const userId = session.user.id;
         if (lastSyncedUserRef.current === userId) {
-            return; // 이미 이 사용자 ID로 동기화 완료됨
+            return;
         }
         lastSyncedUserRef.current = userId;
 
-        const initUserSession = async () => {
-            // 알림 설정 동기화
+        const syncSessionData = async () => {
             if (session.user.user_metadata) {
                 const meta = session.user.user_metadata;
                 if (meta.sba_qt_alarm_enabled !== undefined) {
@@ -485,9 +611,6 @@ export default function App() {
                 }
             }
 
-            // 소속 교회 정보 불러오기
-            await fetchUserChurch(userId);
-
             // 로컬-클라우드 데이터 동기화
             const res = await syncLocalDataToCloud();
             if (res.success) {
@@ -496,7 +619,7 @@ export default function App() {
             }
         };
 
-        initUserSession();
+        syncSessionData();
     }, [session]);
 
     // 브라우저 알림 스케줄러 구동
@@ -897,6 +1020,7 @@ export default function App() {
                         session={session} 
                         addToast={addToast}
                         onBookmarkChange={() => setBookmarkTrigger(prev => prev + 1)}
+                        onOpenAuthModal={() => setShowAuth(true)}
                     />
                 );
             case 'reading':
@@ -906,6 +1030,7 @@ export default function App() {
                         session={session} 
                         addToast={addToast}
                         onBookmarkChange={() => setBookmarkTrigger(prev => prev + 1)}
+                        onOpenAuthModal={() => setShowAuth(true)}
                     />
                 );
             case 'bookmarks':
@@ -935,207 +1060,12 @@ export default function App() {
     };
 
     // 로딩 혹은 RLS 조회 대기
-    if (checkingChurch) {
+    if (checkingChurch || !userChurch) {
         return (
             <ThemeProvider theme={theme}>
                 <GlobalStyle />
                 <OnboardingOverlay>
-                    <div className="sba-loading">사용자 소속 정보를 조회하는 중...</div>
-                </OnboardingOverlay>
-            </ThemeProvider>
-        );
-    }
-
-    // 1. 비로그인 상태일 때 온보딩 노출 (소셜 로그인 유도)
-    if (!session) {
-        return (
-            <ThemeProvider theme={theme}>
-                <GlobalStyle />
-                <OnboardingOverlay className={isDark ? 'dark' : ''}>
-                    <OnboardingCard>
-                        <OnboardingHeader>
-                            <OnboardingTitle>말씀 QT & 통독</OnboardingTitle>
-                            <OnboardingDesc>
-                                교회별 일정 관리 및 묵상 공유, 매일 알림 설정을 위해 소셜 계정으로 로그인해 주세요.
-                            </OnboardingDesc>
-                        </OnboardingHeader>
-                        
-                        <SocialButton $provider="google" onClick={() => handleOAuthLogin('google')}>
-                            <svg width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: '8px' }}><path fill="#EA4335" d="M12 5.04c1.74 0 3.3.6 4.53 1.78l3.38-3.38C17.86 1.54 15.17 1 12 1 7.24 1 3.2 3.82 1.34 7.92l3.96 3.07C6.26 7.63 8.92 5.04 12 5.04z"/><path fill="#4285F4" d="M23.49 12.27c0-.82-.07-1.61-.21-2.38H12v4.51h6.44c-.28 1.48-1.12 2.73-2.38 3.58l3.69 2.87c2.16-2 3.74-4.94 3.74-8.58z"/><path fill="#FBBC05" d="M5.3 14.79a7.16 7.16 0 0 1 0-4.54L1.34 7.18a11.96 11.96 0 0 0 0 9.64l3.96-3.03z"/><path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.69-2.87c-1.02.68-2.33 1.09-4.27 1.09-3.08 0-5.74-2.59-6.7-5.96L1.34 15.38C3.2 19.48 7.24 23 12 23z"/></svg>
-                            Google로 로그인
-                        </SocialButton>
-                        
-                        <SocialButton $provider="kakao" onClick={() => handleOAuthLogin('kakao')}>
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '8px' }}><path d="M12 3c-4.97 0-9 3.185-9 7.11 0 2.507 1.644 4.717 4.148 5.918-.173.65-.626 2.34-.716 2.684-.112.433.155.427.327.311.135-.09 2.148-1.464 3.003-2.046C10.428 17.054 11.2 17.11 12 17.11c4.97 0 9-3.185 9-7.11C21 6.185 16.97 3 12 3z"/></svg>
-                            카카오로 로그인
-                        </SocialButton>
-                    </OnboardingCard>
-                    
-                    {/* 토스트 팝업 렌더러 */}
-                    <div className="sba-toast-container">
-                        {toasts.map(t => (
-                            <div key={t.id} className="sba-toast">{t.message}</div>
-                        ))}
-                    </div>
-                </OnboardingOverlay>
-            </ThemeProvider>
-        );
-    }
-
-    // 2. 로그인되었으나 소속 교회가 없을 때 온보딩 노출 (가입/개설 유도)
-    if (!userChurch) {
-        return (
-            <ThemeProvider theme={theme}>
-                <GlobalStyle />
-                <OnboardingOverlay className={isDark ? 'dark' : ''}>
-                    <OnboardingCard>
-                        <OnboardingHeader>
-                            <OnboardingTitle>교회 연결하기</OnboardingTitle>
-                            <OnboardingDesc>
-                                기존 교회를 찾아 가입하거나, 본인의 소속 교회를 직접 개설하여 일정을 시작하세요.
-                            </OnboardingDesc>
-                        </OnboardingHeader>
-                        
-                        <TabButtonGroup>
-                            <TabButton $active={onboardingTab === 'join'} onClick={() => setOnboardingTab('join')}>교회 검색 가입</TabButton>
-                            <TabButton $active={onboardingTab === 'create'} onClick={() => setOnboardingTab('create')}>새 교회 개설</TabButton>
-                        </TabButtonGroup>
-
-                        {onboardingTab === 'join' ? (
-                            <>
-                                <FormField>
-                                    <FormLabel>교회 이름 검색</FormLabel>
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <FormInput 
-                                            type="text" 
-                                            placeholder="교회 이름 입력 (예: 서울북부)" 
-                                            value={searchQuery}
-                                            onChange={e => setSearchQuery(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && handleSearchChurch()}
-                                        />
-                                        <button 
-                                            onClick={handleSearchChurch}
-                                            style={{ flex: 'none', padding: '10px 16px', background: 'var(--sba-text)', color: 'var(--sba-bg)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
-                                        >
-                                            검색
-                                        </button>
-                                    </div>
-                                </FormField>
-
-                                {searchResults.length > 0 && (
-                                    <FormField>
-                                        <FormLabel>검색 결과 ({searchResults.length}건)</FormLabel>
-                                        <SearchResultList>
-                                            {searchResults.map(c => (
-                                                <SearchResultItem 
-                                                    key={c.id} 
-                                                    $selected={selectedChurch?.id === c.id}
-                                                    onClick={() => setSelectedChurch(c)}
-                                                >
-                                                    <span>{c.name}</span>
-                                                    <span style={{ fontSize: '0.7rem', color: 'var(--sba-text-secondary)' }}>
-                                                        {c.invite_code ? '초대코드 필요' : '공개'}
-                                                    </span>
-                                                </SearchResultItem>
-                                            ))}
-                                        </SearchResultList>
-                                    </FormField>
-                                )}
-
-                                {selectedChurch && selectedChurch.invite_code && (
-                                    <FormField>
-                                        <FormLabel>초대 코드 (Invite Code)</FormLabel>
-                                        <FormInput 
-                                            type="password" 
-                                            placeholder="교회 관리자에게 받은 초대 코드를 입력해 주세요." 
-                                            value={inviteCode}
-                                            onChange={e => setInviteCode(e.target.value)}
-                                        />
-                                    </FormField>
-                                )}
-
-                                <ActionButton 
-                                    onClick={handleJoinChurch}
-                                    disabled={!selectedChurch || submitting}
-                                    style={{ marginTop: '12px' }}
-                                >
-                                    {submitting ? '가입 처리 중...' : selectedChurch ? `'${selectedChurch.name}' 가입하기` : '가입할 교회를 선택해 주세요'}
-                                </ActionButton>
-                            </>
-                        ) : (
-                            <>
-                                <FormField>
-                                    <FormLabel>교회 이름</FormLabel>
-                                    <FormInput 
-                                        type="text" 
-                                        placeholder="예: 서울북부교회" 
-                                        value={newChurchName}
-                                        onChange={e => setNewChurchName(e.target.value)}
-                                    />
-                                </FormField>
-
-                                <FormField>
-                                    <FormLabel>초대 코드 (선택)</FormLabel>
-                                    <FormInput 
-                                        type="text" 
-                                        placeholder="가입 시 필수로 요구할 비밀 코드를 입력하세요." 
-                                        value={newInviteCode}
-                                        onChange={e => setNewInviteCode(e.target.value)}
-                                    />
-                                </FormField>
-
-                                <FormField>
-                                    <FormLabel>교회 공개 여부</FormLabel>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                                        <input 
-                                            type="checkbox" 
-                                            id="isPublic"
-                                            checked={newIsPublic} 
-                                            onChange={e => setNewIsPublic(e.target.checked)} 
-                                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                                        />
-                                        <label htmlFor="isPublic" style={{ fontSize: '0.85rem', cursor: 'pointer' }}>교회 검색 목록에 노출합니다.</label>
-                                    </div>
-                                </FormField>
-
-                                <FormField>
-                                    <FormLabel>대표 테마 색상</FormLabel>
-                                    <ColorPresetGroup>
-                                        {colorPresets.map(color => (
-                                            <ColorCircle 
-                                                key={color} 
-                                                $color={color} 
-                                                $active={newThemeColor === color}
-                                                onClick={() => setNewThemeColor(color)}
-                                            />
-                                        ))}
-                                    </ColorPresetGroup>
-                                </FormField>
-
-                                <ActionButton 
-                                    onClick={handleCreateChurch}
-                                    disabled={!newChurchName.trim() || submitting}
-                                    style={{ marginTop: '12px' }}
-                                >
-                                    {submitting ? '교회 개설 중...' : '교회 개설하고 가입하기'}
-                                </ActionButton>
-                            </>
-                        )}
-                        
-                        <button 
-                            onClick={() => supabase.auth.signOut()}
-                            style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--sba-text-secondary)', fontSize: '0.8rem', marginTop: '16px', cursor: 'pointer', textDecoration: 'underline' }}
-                        >
-                            로그아웃 (다른 계정으로 로그인)
-                        </button>
-                    </OnboardingCard>
-                    
-                    {/* 토스트 팝업 렌더러 */}
-                    <div className="sba-toast-container">
-                        {toasts.map(t => (
-                            <div key={t.id} className="sba-toast">{t.message}</div>
-                        ))}
-                    </div>
+                    <div className="sba-loading">교회 정보를 조회하는 중...</div>
                 </OnboardingOverlay>
             </ThemeProvider>
         );

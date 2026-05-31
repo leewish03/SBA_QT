@@ -271,7 +271,7 @@ const StyledTextarea = styled.textarea`
   }
 `;
 
-function NoteEditor({ targetDate, session }) {
+function NoteEditor({ targetDate, session, onOpenAuthModal }) {
   const [content, setContent] = useState('');
   const contentRef = useRef(content);
   const [saveStatus, setSaveStatus] = useState('저장 완료');
@@ -482,6 +482,25 @@ function NoteEditor({ targetDate, session }) {
             onChange={handleChange}
             onBlur={handleBlur}
           />
+          {!session && (
+            <div 
+              onClick={onOpenAuthModal}
+              style={{
+                marginTop: '10px',
+                padding: '10px',
+                borderRadius: '6px',
+                background: 'var(--sba-card-sub-bg)',
+                border: '1px dashed var(--sba-border-strong)',
+                fontSize: '0.8rem',
+                textAlign: 'center',
+                cursor: 'pointer',
+                color: 'var(--sba-text-secondary)'
+              }}
+            >
+              로그인하시면 메모를 안전하게 클라우드에 백업하고 여러 기기에서 동기화할 수 있습니다. 
+              <span style={{ fontWeight: 'bold', textDecoration: 'underline', marginLeft: '6px', color: 'var(--sba-text)' }}>로그인하기</span>
+            </div>
+          )}
         </TextareaWrapper>
       </DrawerContainer>
     </>
@@ -710,7 +729,7 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
 // ==========================================
 // 3. TabToday (묵상 탭)
 // ==========================================
-export function TabToday({ todayPlan, session, addToast, onBookmarkChange }) {
+export function TabToday({ todayPlan, session, addToast, onBookmarkChange, onOpenAuthModal }) {
   const [verses, setVerses] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -765,6 +784,7 @@ export function TabToday({ todayPlan, session, addToast, onBookmarkChange }) {
       <NoteEditor 
         targetDate={todayPlan.dateObj} 
         session={session} 
+        onOpenAuthModal={onOpenAuthModal}
       />
     </div>
   );
@@ -773,7 +793,7 @@ export function TabToday({ todayPlan, session, addToast, onBookmarkChange }) {
 // ==========================================
 // 4. TabReading (통독 탭)
 // ==========================================
-export function TabReading({ todayPlan, session, addToast, onBookmarkChange }) {
+export function TabReading({ todayPlan, session, addToast, onBookmarkChange, onOpenAuthModal }) {
   const [blocks, setBlocks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -784,7 +804,7 @@ export function TabReading({ todayPlan, session, addToast, onBookmarkChange }) {
     const parts = rangeStr.split(',');
     parts.forEach(part => {
       if (part.includes('-')) {
-        const [start, end] = part.split('-').map(Number);
+         const [start, end] = part.split('-').map(Number);
         for (let i = start; i <= end; i++) result.push(i);
       } else {
         result.push(Number(part));
@@ -873,6 +893,7 @@ export function TabReading({ todayPlan, session, addToast, onBookmarkChange }) {
       <NoteEditor 
         targetDate={todayPlan.dateObj} 
         session={session} 
+        onOpenAuthModal={onOpenAuthModal}
       />
     </div>
   );

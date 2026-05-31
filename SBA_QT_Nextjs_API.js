@@ -44,11 +44,16 @@ export async function GET(request) {
     // 1. GET /api/churches
     if (pathname.endsWith('/churches')) {
       const query = searchParams.get('query') || '';
-      const { data, error } = await supabase
-        .from('qt_churches')
-        .select('*')
-        .eq('is_public', true)
-        .ilike('name', `%${query}%`);
+      const slug = searchParams.get('slug') || '';
+      
+      let builder = supabase.from('qt_churches').select('*');
+      if (slug) {
+        builder = builder.eq('slug', slug);
+      } else {
+        builder = builder.eq('is_public', true).ilike('name', `%${query}%`);
+      }
+      
+      const { data, error } = await builder;
 
       if (error) throw error;
       return NextResponse.json(data);

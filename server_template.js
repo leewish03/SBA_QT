@@ -22,7 +22,17 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KE
 console.log(`[Supabase Config] URL: ${supabaseUrl ? 'OK' : 'MISSING'}, Key: ${supabaseAnonKey ? `OK (${supabaseAnonKey.substring(0, 10)}...)` : 'MISSING'}`);
 
 const memoryDB = {
-  churches: [],
+  churches: [
+    {
+      id: '5e87c20a-39e6-440b-925a-04c225c28940',
+      name: '서울북부교회',
+      invite_code: null,
+      is_public: true,
+      theme_color: '#4A5568',
+      slug: 'seoul-north',
+      created_at: new Date().toISOString()
+    }
+  ],
   members: [],
   schedules: [],
 };
@@ -111,18 +121,25 @@ const BIBLE_BOOKS = [
 app.get('/api/churches', async (req, res) => {
   try {
     const query = req.query.query || '';
+    const slug = req.query.slug || '';
     if (isMock(req)) {
+      if (slug) {
+        const church = memoryDB.churches.find(c => c.slug === slug);
+        return res.json(church ? [church] : []);
+      }
       const filtered = memoryDB.churches.filter(c => 
         c.is_public && c.name.toLowerCase().includes(query.toLowerCase())
       );
       return res.json(filtered);
     }
     const supabase = getSupabaseClient(req.headers.authorization);
-    const { data, error } = await supabase
-      .from('qt_churches')
-      .select('*')
-      .eq('is_public', true)
-      .ilike('name', `%${query}%`);
+    let builder = supabase.from('qt_churches').select('*');
+    if (slug) {
+      builder = builder.eq('slug', slug);
+    } else {
+      builder = builder.eq('is_public', true).ilike('name', `%${query}%`);
+    }
+    const { data, error } = await builder;
 
     if (error) throw error;
     res.json(data);
@@ -227,12 +244,12 @@ app.post('/api/churches/join', async (req, res) => {
           id: 'member-' + Math.random().toString(36).substr(2, 9),
           user_id: user.id,
           church_id: church_id,
-          role: 'member',
+          role: 'admin',
           created_at: new Date().toISOString()
         };
         memoryDB.members.push(member);
       } else {
-        member.role = 'member';
+        member.role = 'admin';
       }
       return res.json({ success: true, message: '교회 가입이 완료되었습니다.', member });
     }
@@ -325,6 +342,7 @@ app.get('/api/churches/mine', async (req, res) => {
         name: church.name,
         theme_color: church.theme_color,
         invite_code: church.invite_code,
+        slug: church.slug || 'seoul-north',
         role: member.role
       });
     }
@@ -346,7 +364,7 @@ app.get('/api/churches/mine', async (req, res) => {
 
     const { data: churchData, error: churchError } = await supabase
       .from('qt_churches')
-      .select('name, theme_color, invite_code')
+      .select('name, theme_color, invite_code, slug')
       .eq('id', memberData.church_id)
       .single();
 
@@ -357,6 +375,7 @@ app.get('/api/churches/mine', async (req, res) => {
       name: churchData.name,
       theme_color: churchData.theme_color,
       invite_code: churchData.invite_code,
+      slug: churchData.slug,
       role: memberData.role
     });
   } catch (error) {

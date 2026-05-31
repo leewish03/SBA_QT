@@ -63,14 +63,20 @@ function generateUUID() {
 
     try {
         // 1. Splash & Guest Onboarding
-        console.log('1. Navigating to http://localhost:3000/...');
-        await page.goto('http://localhost:3000/', { waitUntil: 'networkidle2' });
+        console.log('1. Navigating to http://localhost:3000/seoul-north...');
+        await page.goto('http://localhost:3000/seoul-north', { waitUntil: 'networkidle2' });
         
-        console.log('Waiting for splash screen...');
-        await delay(3500); // Wait for splash to disappear
+        async function captureAndLog(filename) {
+            const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 150));
+            console.log(`[CAPTURE ${filename}] Body Text Preview: "${bodyText.replace(/\n/g, ' ')}"`);
+            await page.screenshot({ path: path.join(scratchDir, filename) });
+            console.log(`Saved: ${filename}`);
+        }
 
-        await page.screenshot({ path: path.join(scratchDir, 'qa_1_login_page.png') });
-        console.log('Saved: qa_1_login_page.png');
+        console.log('Waiting for splash screen...');
+        await delay(4500); // 4.5s delay to ensure splash is fully gone
+
+        await captureAndLog('qa_1_guest_page.png');
 
         // 2. Inject Session Mock & Reload
         const testUuid = generateUUID();
@@ -115,7 +121,14 @@ function generateUUID() {
 
         console.log('Reloading page to apply mock session...');
         await page.reload({ waitUntil: 'networkidle2' });
-        await delay(3500); // Wait for splash again
+        
+        console.log('Waiting for splash screen after reload...');
+        try {
+            await page.waitForSelector('.sba-splash-screen', { hidden: true, timeout: 15000 });
+        } catch (e) {
+            await delay(4500);
+        }
+        await delay(1000); // Ensure state updates complete
 
         // Debug: print localStorage keys and session
         const lsKeys = await page.evaluate(() => {
@@ -126,93 +139,14 @@ function generateUUID() {
         });
         console.log('localStorage status after reload:', lsKeys);
 
-        await page.screenshot({ path: path.join(scratchDir, 'qa_2_onboarding_join_create.png') });
-        console.log('Saved: qa_2_onboarding_join_create.png');
-
-        // 3. Switch to "새 교회 개설"
-        console.log('3. Switching to Create Church Tab...');
-        const tabButtons = await page.$$('button');
-        let createTabBtn = null;
-        for (const btn of tabButtons) {
-            const text = await page.evaluate(el => el.textContent.trim(), btn);
-            if (text.includes('새 교회 개설')) {
-                createTabBtn = btn;
-                break;
-            }
-        }
-
-        if (createTabBtn) {
-            await createTabBtn.click();
-            await delay(500);
-        } else {
-            console.error('Failed to find "새 교회 개설" tab button');
-        }
-
-        // Fill Create Church form
-        console.log('Filling Create Church form...');
-        const randomNum = Math.floor(1000 + Math.random() * 9000);
-        const churchName = `QA 검증교회 ${randomNum}`;
-        const inviteCode = `QA${randomNum}`;
-
-        // Input selectors
-        const inputs = await page.$$('input');
-        // Find inputs by placeholder or index
-        for (const input of inputs) {
-            const placeholder = await page.evaluate(el => el.placeholder || '', input);
-            if (placeholder.includes('예: 서울북부교회')) {
-                await input.type(churchName);
-            } else if (placeholder.includes('비밀 코드를 입력하세요')) {
-                await input.type(inviteCode);
-            }
-        }
-
-        // Select 3rd color preset
-        console.log('Selecting color preset...');
-        // Color circles have class or styled-component class. Let's find via evaluating or custom selector
-        await page.evaluate(() => {
-            const circles = Array.from(document.querySelectorAll('div')).filter(el => {
-                const style = window.getComputedStyle(el);
-                return style.borderRadius === '50%' && style.width === '28px';
-            });
-            if (circles.length >= 3) {
-                circles[2].click(); // Click 3rd preset (theme_color)
-            }
-        });
-        await delay(500);
-
-        await page.screenshot({ path: path.join(scratchDir, 'qa_3_create_church_form.png') });
-        console.log('Saved: qa_3_create_church_form.png');
-
-        // Submit creation
-        console.log('Submitting church creation...');
-        const actionButtons = await page.$$('button');
-        let submitBtn = null;
-        for (const btn of actionButtons) {
-            const text = await page.evaluate(el => el.textContent.trim(), btn);
-            if (text.includes('교회 개설하고 가입하기')) {
-                submitBtn = btn;
-                break;
-            }
-        }
-
-        if (submitBtn) {
-            await submitBtn.click();
-            console.log('Clicked submit. Waiting for onboarding finish & main load...');
-            await delay(4000); // Wait for API response and redirect
-        } else {
-            console.error('Failed to find submit button');
-        }
-
-        // Verify we are on main page
-        await page.screenshot({ path: path.join(scratchDir, 'qa_4_main_no_schedule.png') });
-        console.log('Saved: qa_4_main_no_schedule.png');
+        await captureAndLog('qa_2_main_meditation.png');
 
         // 4. Open Settings Modal for Admin operations
         console.log('4. Opening Settings Modal...');
         const settingsBtn = await page.$('button[title="설정"]');
         if (settingsBtn) {
-            await settingsBtn.click();
-            await delay(1200);
+            await page.evaluate((btn) => btn.click(), settingsBtn);
+            await delay(1500);
         } else {
             console.error('Failed to find Settings button');
         }
@@ -252,8 +186,7 @@ function generateUUID() {
             }
         });
         
-        await page.screenshot({ path: path.join(scratchDir, 'qa_5_settings_admin_tab.png') });
-        console.log('Saved: qa_5_settings_admin_tab.png');
+        await captureAndLog('qa_5_settings_admin_tab.png');
 
         // Handle dialog alert if any
         page.on('dialog', async dialog => {
@@ -275,8 +208,8 @@ function generateUUID() {
         console.log('Re-opening Settings for manual edit...');
         const settingsBtn2 = await page.$('button[title="설정"]');
         if (settingsBtn2) {
-            await settingsBtn2.click();
-            await delay(1200);
+            await page.evaluate((btn) => btn.click(), settingsBtn2);
+            await delay(1500);
         }
 
         // Switch to Manual Edit tab
@@ -325,8 +258,7 @@ function generateUUID() {
         });
         await delay(500);
 
-        await page.screenshot({ path: path.join(scratchDir, 'qa_6_settings_manual_edit.png') });
-        console.log('Saved: qa_6_settings_manual_edit.png');
+        await captureAndLog('qa_6_settings_manual_edit.png');
 
         // Save manual schedule
         console.log('Saving manual schedule...');
@@ -341,12 +273,11 @@ function generateUUID() {
         console.log('Re-opening Settings for push config check...');
         const settingsBtn3 = await page.$('button[title="설정"]');
         if (settingsBtn3) {
-            await settingsBtn3.click();
-            await delay(1200);
+            await page.evaluate((btn) => btn.click(), settingsBtn3);
+            await delay(1500);
         }
 
-        await page.screenshot({ path: path.join(scratchDir, 'qa_8_settings_push_only.png') });
-        console.log('Saved: qa_8_settings_push_only.png');
+        await captureAndLog('qa_8_settings_push_only.png');
 
         // Close Settings modal
         console.log('Closing Settings modal...');
@@ -358,8 +289,7 @@ function generateUUID() {
         await delay(1000);
 
         // Verify applied schedule on main screen
-        await page.screenshot({ path: path.join(scratchDir, 'qa_7_main_schedule_applied.png') });
-        console.log('Saved: qa_7_main_schedule_applied.png');
+        await captureAndLog('qa_7_main_schedule_applied.png');
 
     } catch (e) {
         console.error('Fatal error during E2E QA run:', e);
