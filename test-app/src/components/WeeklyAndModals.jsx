@@ -673,7 +673,7 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
             <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '95%' }}>
                 <ModalHeader>
                     <ModalTitle>설정 (Settings)</ModalTitle>
-                    <ModalCloseButton onClick={handleClose}>✕</ModalCloseButton>
+                    <ModalCloseButton data-qa="settings-close-btn" onClick={handleClose}>✕</ModalCloseButton>
                 </ModalHeader>
                 
                 {/* 소속 교회 정보 */}
@@ -852,7 +852,7 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
                 </div>
                 
                 <ButtonGroup style={{ marginTop: '20px' }}>
-                    <ShadButton onClick={handleClose}>
+                    <ShadButton data-qa="settings-confirm-btn" onClick={handleClose}>
                         확인
                     </ShadButton>
                 </ButtonGroup>
