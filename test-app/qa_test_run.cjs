@@ -141,7 +141,7 @@ function generateUUID() {
             console.error('Failed to find Settings button');
         }
 
-        // Capture Settings Modal showing admin section (Purge / startDateStr)
+        // Capture Settings Modal showing admin section (Purge)
         await captureAndLog('qa_5_settings_admin_tab.png');
 
         // Click Google Sheets Purge button
@@ -153,7 +153,7 @@ function generateUUID() {
         });
         await delay(3000); // Wait for API sync to complete & settings modal to auto-close
 
-        // 4. Open Calendar Modal & Change Date (Replaces manual edit screen QA)
+        // 4. Open Calendar Modal & Change Date
         console.log('4. Opening Calendar Modal...');
         const dateNavHeader = await page.$('.sba-date-nav-wrapper h1');
         if (dateNavHeader) {
@@ -173,7 +173,7 @@ function generateUUID() {
         await delay(1000);
 
         // Capture Calendar grid view
-        await captureAndLog('qa_6_settings_manual_edit.png');
+        await captureAndLog('qa_6_calendar_grid.png');
 
         // Select a date from calendar grid (e.g. 15th)
         console.log('Selecting 15th from calendar grid...');
