@@ -352,7 +352,14 @@ export default function App() {
 
     // 묵상 기준일 상태 (구글 시트 연동 시 날짜 계산 오프셋용)
     const [startDateStr, setStartDateStr] = useState(() => {
-        return localStorage.getItem('sba_qt_start_date') || '2024-12-17';
+        let val = localStorage.getItem('sba_qt_start_date');
+        // 이전 잘못된 배포로 인해 사용자의 브라우저 로컬스토리지에 저장되었을 수 있는
+        // 오염된 묵상 기준일(2024-12-30, 2026-01-01 등)을 올바른 원래의 기준일인 2024-12-17로 강제 복구합니다.
+        if (val === '2024-12-30' || val === '2026-01-01') {
+            localStorage.setItem('sba_qt_start_date', '2024-12-17');
+            val = '2024-12-17';
+        }
+        return val || '2024-12-17';
     });
 
     const handleSetStartDateStr = (val) => {
