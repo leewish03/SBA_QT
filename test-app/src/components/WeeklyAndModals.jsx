@@ -366,6 +366,7 @@ const FontSizeVal = styled.span`
 `;
 
 export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, session, userChurch, setUserChurch, scheduleData, loadSchedule, startDateStr, setStartDateStr }) {
+    if (!isOpen) return null;
     const [syncing, setSyncing] = useState(false);
     const [stats, setStats] = useState({ bookmarks: 0, notes: 0 });
     const [fontSize, setFontSize] = useState(() => {
