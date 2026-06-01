@@ -45,6 +45,10 @@ function generateUUID() {
             console.log(`[BROWSER LOG]: ${text}`);
         }
     });
+
+    page.on('pageerror', err => {
+        console.log('[BROWSER PAGE ERROR (UNCAUGHT)]:', err.stack || err.message);
+    });
     
     // Listen to network responses for API debugging
     page.on('response', async response => {
@@ -77,6 +81,11 @@ function generateUUID() {
         await delay(4500); // 4.5s delay to ensure splash is fully gone
 
         await captureAndLog('qa_1_guest_page.png');
+
+        console.log('Dismissing push prompt for subsequent test reliability...');
+        await page.evaluate(() => {
+            localStorage.setItem('sba_qt_push_prompt_dismissed', 'true');
+        });
 
         // 2. Inject Session Mock & Reload
         const testUuid = generateUUID();

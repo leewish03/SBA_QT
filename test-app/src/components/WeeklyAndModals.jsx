@@ -4,6 +4,19 @@ import { calcQtDays, getEffectiveDate, SHORT_TO_FULL, safeToISODateString, BIBLE
 import { supabase } from '../utils/supabaseClient';
 import { SpotlightCard } from './ReactBits';
 
+const urlBase64ToUint8Array = (base64String) => {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+};
+
 // ==========================================
 // 0. Animations & Common Modal Components (shadcn/ui Style)
 // ==========================================
@@ -394,19 +407,6 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
 
     const [alarmHour, alarmMinute] = alarmTime.split(':');
 
-    const urlBase64ToUint8Array = (base64String) => {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding)
-            .replace(/\-/g, '+')
-            .replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        const outputArray = new Uint8Array(rawData.length);
-        for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData.charCodeAt(i);
-        }
-        return outputArray;
-    };
-
     const isAdmin = userChurch?.role === 'admin';
 
     const changeFontSize = (delta) => {
@@ -785,7 +785,7 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
                     </div>
 
                     {/* 알림 즉시 테스트 버튼 */}
-                    {alarmEnabled && (
+                    {alarmEnabled && isAdmin && (
                         <button 
                             onClick={handleTestNotification}
                             disabled={isTesting}
@@ -1328,3 +1328,205 @@ export const TableCell = styled.td`
   padding: 12px 16px;
   color: var(--sba-text-secondary);
 `;
+
+// 알림 유도 다이얼로그 (PushPromptModal)
+const PromptOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+  animation: sbaFadeIn 0.3s ease-out;
+
+  @keyframes sbaFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+`;
+
+const PromptContent = styled.div`
+  background-color: var(--sba-card-bg);
+  border: 1px solid var(--sba-border);
+  border-radius: 16px;
+  max-width: 400px;
+  width: 100%;
+  padding: 24px;
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  animation: sbaScaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+
+  @keyframes sbaScaleUp {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+`;
+
+const PromptIconWrapper = styled.div`
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  margin-bottom: 16px;
+  font-size: 1.5rem;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+`;
+
+const PromptTitle = styled.h3`
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--sba-text);
+  margin: 0 0 10px 0;
+  line-height: 1.3;
+`;
+
+const PromptDescription = styled.p`
+  font-size: 0.85rem;
+  color: var(--sba-text-secondary);
+  line-height: 1.5;
+  margin: 0 0 24px 0;
+`;
+
+const PromptButtonGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+`;
+
+const PromptCloseX = styled.button`
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  color: var(--sba-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+  
+  &:hover {
+    color: var(--sba-text);
+  }
+`;
+
+export function PushPromptModal({ isOpen, onClose, session, userChurch, onAlarmEnabledChange }) {
+    const [submitting, setSubmitting] = useState(false);
+
+    if (!isOpen) return null;
+
+    const handleAccept = async () => {
+        if (!('serviceWorker' in navigator)) {
+            alert('이 브라우저는 웹 알림 기능을 지원하지 않습니다.');
+            handleDismiss();
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                alert('알림 권한이 거부되었습니다. 이후 브라우저 설정에서 수동으로 허용하실 수 있습니다.');
+                handleDismiss();
+                return;
+            }
+
+            const reg = await navigator.serviceWorker.ready;
+            const publicVapidKey = 'BNPrlOSFSpYZ3wvt0EDSHT0MZJ9oXK79UUcUXfHuqFQVWZsGrGkm3IofICklW1fIWJtsrnURJxa6QxMCW3BPln4';
+            const subscription = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+            });
+
+            const subJson = subscription.toJSON();
+            const p256dh = subJson.keys?.p256dh || '';
+            const auth = subJson.keys?.auth || '';
+
+            // 기본 알람 시각은 '08:00' 으로 세팅
+            const defaultAlarmTime = '08:00';
+            const { error } = await supabase
+                .from('qt_push_subscriptions')
+                .upsert({
+                    user_id: session ? session.user.id : null,
+                    endpoint: subscription.endpoint,
+                    p256dh: p256dh,
+                    auth: auth,
+                    alarm_time: defaultAlarmTime,
+                    church_id: userChurch?.id || '5e87c20a-39e6-440b-925a-04c225c28940', // 디폴트 서울북부교회 ID
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'endpoint' });
+
+            if (error) throw error;
+
+            localStorage.setItem('sba_qt_alarm_enabled', 'true');
+            localStorage.setItem('sba_qt_alarm_time', defaultAlarmTime);
+            if (onAlarmEnabledChange) onAlarmEnabledChange(true);
+            
+            alert('매일 아침 8시 알림이 활성화되었습니다!');
+            handleDismiss();
+        } catch (err) {
+            console.error('푸시 허용 유도 구독 실패:', err);
+            alert('알림 등록 도중 오류가 발생했습니다: ' + err.message);
+            handleDismiss();
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleDismiss = () => {
+        localStorage.setItem('sba_qt_push_prompt_dismissed', 'true');
+        onClose();
+    };
+
+    return (
+        <PromptOverlay onClick={handleDismiss}>
+            <PromptContent onClick={e => e.stopPropagation()}>
+                <PromptCloseX onClick={handleDismiss}>✕</PromptCloseX>
+                <PromptIconWrapper>📢</PromptIconWrapper>
+                <PromptTitle>매일 아침 말씀 배달 알림</PromptTitle>
+                <PromptDescription>
+                    매일 아침 8시, 오늘의 QT 말씀과 성경 읽기표 통독 가이드를 알림으로 보내드립니다. 화면이 꺼져 있어도 안전하게 받아보실 수 있습니다.
+                </PromptDescription>
+                <PromptButtonGroup>
+                    <ShadButton 
+                        onClick={handleAccept} 
+                        disabled={submitting}
+                        style={{
+                            background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+                            color: 'white',
+                            border: 'none',
+                            fontWeight: '600'
+                        }}
+                    >
+                        {submitting ? '등록 중...' : '알림 받기 (추천)'}
+                    </ShadButton>
+                    <ShadButton 
+                        $variant="outline" 
+                        onClick={handleDismiss}
+                        disabled={submitting}
+                    >
+                        다음에 하기
+                    </ShadButton>
+                </PromptButtonGroup>
+            </PromptContent>
+        </PromptOverlay>
+    );
+}

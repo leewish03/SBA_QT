@@ -5,7 +5,7 @@ import './SBA_QT.css';
 import { getMidnightKST, FULL_TO_SHORT, DAYS_ARR, getEffectiveDate, safeToISODateString, calcQtDays } from './utils/bibleLogic';
 import { TopHeader, BottomNav, AppFooter } from './components/NavComponents';
 import { TabToday, TabReading, TabBookmarks, SharingTab } from './components/TabComponents';
-import { TabWeekly, SettingsModal, CalendarModal, AuthModal } from './components/WeeklyAndModals';
+import { TabWeekly, SettingsModal, CalendarModal, AuthModal, PushPromptModal } from './components/WeeklyAndModals';
 import { supabase } from './utils/supabaseClient';
 import { syncLocalDataToCloud } from './utils/syncManager';
 import { DecryptedText } from './components/ReactBits';
@@ -377,6 +377,7 @@ export default function App() {
     const [showCalendar, setShowCalendar] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showAuth, setShowAuth] = useState(false);
+    const [showPushPrompt, setShowPushPrompt] = useState(false);
     
     // 온보딩 가입/개설 탭
     const [onboardingTab, setOnboardingTab] = useState('join');
@@ -710,9 +711,17 @@ export default function App() {
         const fadeTimer = setTimeout(() => setIsSplashFading(true), 2200);
         const removeTimer = setTimeout(() => setIsSplashVisible(false), 3000);
 
+        // 알림 권한 유도 팝업 타이머 (스플래시 제거 후 2초인 5000ms 시점)
+        const promptTimer = setTimeout(() => {
+            if (Notification.permission === 'default' && localStorage.getItem('sba_qt_push_prompt_dismissed') !== 'true') {
+                setShowPushPrompt(true);
+            }
+        }, 5000);
+
         return () => {
             clearTimeout(fadeTimer);
             clearTimeout(removeTimer);
+            clearTimeout(promptTimer);
         };
     }, []);
 
@@ -1180,6 +1189,13 @@ export default function App() {
                     isOpen={showAuth}
                     onClose={() => setShowAuth(false)}
                     addToast={addToast}
+                />
+
+                <PushPromptModal
+                    isOpen={showPushPrompt}
+                    onClose={() => setShowPushPrompt(false)}
+                    session={session}
+                    userChurch={userChurch}
                 />
 
                 {/* 토스트 팝업 렌더러 */}
