@@ -491,6 +491,114 @@ app.get('/api/sba-qt', async (req, res) => {
   }
 });
 
+// 5.5 GET /api/today-qt (오늘의 QT 및 통독 데이터 반환)
+app.get('/api/today-qt', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (!cachedSchedule || (now - lastFetchTime > CACHE_DURATION_MS)) {
+      console.log("구글 시트에서 최신 일정을 동기화합니다...");
+      cachedSchedule = await fetchAndParseSchedule();
+      lastFetchTime = now;
+    }
+    
+    // KST 기준 현재 날짜 얻기 (새벽 5시 이전이면 어제로 간주)
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', hour12: false
+    });
+    
+    const parts = formatter.formatToParts(new Date());
+    let y, m, d, h;
+    for (let p of parts) {
+      if (p.type === 'year') y = parseInt(p.value, 10);
+      if (p.type === 'month') m = parseInt(p.value, 10);
+      if (p.type === 'day') d = parseInt(p.value, 10);
+      if (p.type === 'hour') h = parseInt(p.value, 10);
+    }
+    
+    let kstDate = new Date(y, m - 1, d);
+    if (h < 5) {
+      kstDate.setDate(kstDate.getDate() - 1);
+    }
+    
+    const dMonth = kstDate.getMonth() + 1;
+    const dDay = kstDate.getDate();
+    
+    const START_DATE_STR = '2024-12-17';
+    const parsedStartDate = new Date(START_DATE_STR);
+    
+    const getMidnightUTC = (dateObj) => {
+      const year = dateObj.getFullYear();
+      const month = dateObj.getMonth();
+      const day = dateObj.getDate();
+      return new Date(Date.UTC(year, month, day));
+    };
+    
+    const startKST = getMidnightUTC(parsedStartDate);
+    const targetKST = getMidnightUTC(kstDate);
+    
+    const calcQtDays = (start, target) => {
+      if (target < start) return 0;
+      let days = 0;
+      let current = new Date(start.getTime());
+      while (current <= target) {
+        if (current.getUTCDay() !== 0) days++; // 일요일 제외
+        current.setUTCDate(current.getUTCDate() + 1);
+      }
+      return days;
+    };
+    
+    const DAYS_ARR = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+    const dayName = DAYS_ARR[kstDate.getDay()];
+    
+    let oldPlan = null;
+    if (dayName !== "일요일") {
+      const daysElapsed = calcQtDays(startKST, targetKST);
+      if (daysElapsed > 0 && cachedSchedule.qt_plan) {
+        let count = 0;
+        for (const row of cachedSchedule.qt_plan) {
+          const sp = parseInt(row.start_paragraph, 10);
+          const ep = parseInt(row.end_paragraph, 10);
+          const paras = ep - sp + 1;
+          if (count + paras >= daysElapsed) {
+            const verse = sp + (daysElapsed - count - 1);
+            oldPlan = {
+              chapter: row.chapter,
+              verse: verse.toString(),
+              title: `${row.chapter} ${verse}장`
+            };
+            break;
+          }
+          count += paras;
+        }
+      }
+    }
+    
+    let newPlan = null;
+    if (cachedSchedule.reading_plan) {
+      const readingRow = cachedSchedule.reading_plan.find(r => 
+        parseInt(r.month, 10) === dMonth && parseInt(r.day, 10) === dDay
+      );
+      if (readingRow && readingRow.chapter !== "없음" && readingRow.verse !== "없음") {
+        newPlan = {
+          books: readingRow.chapter.replace(/"/g,'').split(',').map(b => b.trim()),
+          verseRaw: readingRow.verse
+        };
+      }
+    }
+    
+    res.json({
+      date: `${kstDate.getFullYear()}-${String(dMonth).padStart(2, '0')}-${String(dDay).padStart(2, '0')}`,
+      dayName,
+      qt: oldPlan,
+      reading: newPlan
+    });
+  } catch (error) {
+    console.error("today-qt API Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 6. GET /api/schedule (프론트엔드 일반 스케줄 요청용 폴백/대응)
 app.get('/api/schedule', async (req, res) => {
   try {

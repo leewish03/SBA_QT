@@ -484,7 +484,7 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
                 }
 
                 const reg = await navigator.serviceWorker.ready;
-                const publicVapidKey = 'BBRULQ6u9snBnV2LAfyu410fLl9Hhcc9VyE70wkgeEdeYjYCewDSPJ_t19oK_AzVtLDVBUYNc8YjuVb-B5sx8TQ';
+                const publicVapidKey = 'BNPrlOSFSpYZ3wvt0EDSHT0MZJ9oXK79UUcUXfHuqFQVWZsGrGkm3IofICklW1fIWJtsrnURJxa6QxMCW3BPln4';
                 const subscription = await reg.pushManager.subscribe({
                     userVisibleOnly: true,
                     applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
