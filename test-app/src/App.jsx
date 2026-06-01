@@ -352,7 +352,7 @@ export default function App() {
 
     // 묵상 기준일 상태 (구글 시트 연동 시 날짜 계산 오프셋용)
     const [startDateStr, setStartDateStr] = useState(() => {
-        return localStorage.getItem('sba_qt_start_date') || '2026-01-01';
+        return localStorage.getItem('sba_qt_start_date') || '2024-12-17';
     });
 
     const handleSetStartDateStr = (val) => {
@@ -801,7 +801,7 @@ export default function App() {
         const startKST = getMidnightKST(
             parsedStartDate instanceof Date && !isNaN(parsedStartDate.getTime()) 
                 ? parsedStartDate 
-                : new Date('2026-01-01')
+                : new Date('2024-12-17')
         );
 
         for (let i = 0; i < 7; i++) {
@@ -882,7 +882,7 @@ export default function App() {
             const startKST = getMidnightKST(
                 parsedStartDate instanceof Date && !isNaN(parsedStartDate.getTime()) 
                     ? parsedStartDate 
-                    : new Date('2026-01-01')
+                    : new Date('2024-12-17')
             );
             
             if (startKST instanceof Date && !isNaN(startKST.getTime())) {
