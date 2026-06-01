@@ -475,10 +475,14 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
             return;
         }
 
+        // 즉시 UI 상태를 업데이트 (Optimistic Update)
+        setAlarmEnabled(checked);
+
         if (checked) {
             try {
                 const permission = await Notification.requestPermission();
                 if (permission !== 'granted') {
+                    setAlarmEnabled(false);
                     alert('알림 권한이 거부되었습니다. 브라우저 설정에서 알림 권한을 허용해 주세요.');
                     return;
                 }
@@ -508,10 +512,11 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
 
                 if (error) throw error;
 
-                setAlarmEnabled(true);
                 localStorage.setItem('sba_qt_alarm_enabled', 'true');
                 addToast('브라우저 푸시 알림이 활성화되었습니다.');
             } catch (err) {
+                // 에러 발생 시 UI 롤백
+                setAlarmEnabled(false);
                 console.error('푸시 구독 실패:', err);
                 alert('푸시 알림 활성화 도중 오류가 발생했습니다: ' + err.message);
             }
@@ -526,10 +531,11 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
                         .delete()
                         .eq('endpoint', sub.endpoint);
                 }
-                setAlarmEnabled(false);
                 localStorage.setItem('sba_qt_alarm_enabled', 'false');
                 addToast('브라우저 푸시 알림이 비활성화되었습니다.');
             } catch (err) {
+                // 에러 발생 시 UI 롤백
+                setAlarmEnabled(true);
                 console.error('푸시 해제 실패:', err);
             }
         }
