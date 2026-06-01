@@ -109,20 +109,23 @@ serve(async (req) => {
 
     // 보안 인증 검증
     if (isTest) {
-      const authHeader = req.headers.get("Authorization");
-      if (!authHeader) {
-        return new Response(JSON.stringify({ error: "Missing Authorization header for test mode." }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        });
-      }
-      const token = authHeader.replace("Bearer ", "");
-      const { data: { user }, error } = await supabase.auth.getUser(token);
-      if (error || !user) {
-        return new Response(JSON.stringify({ error: "Invalid credentials for test mode." }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        });
+      // 특정 기기(endpoint)를 지정하여 테스트 알림을 보내는 경우에는 토큰 검증 생략 가능
+      if (!targetEndpoint) {
+        const authHeader = req.headers.get("Authorization");
+        if (!authHeader) {
+          return new Response(JSON.stringify({ error: "Missing Authorization header for test mode without endpoint." }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const token = authHeader.replace("Bearer ", "");
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        if (error || !user) {
+          return new Response(JSON.stringify({ error: "Invalid credentials for test mode." }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
       }
     } else {
       const cronSecret = req.headers.get("x-cron-secret");
