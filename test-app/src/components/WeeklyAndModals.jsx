@@ -369,6 +369,14 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
     if (!isOpen) return null;
     const [syncing, setSyncing] = useState(false);
     const [stats, setStats] = useState({ bookmarks: 0, notes: 0 });
+    const [localStartDate, setLocalStartDate] = useState(startDateStr);
+
+    const handleClose = () => {
+        if (localStartDate && localStartDate !== startDateStr) {
+            setStartDateStr(localStartDate);
+        }
+        onClose();
+    };
     const [fontSize, setFontSize] = useState(() => {
         const saved = localStorage.getItem('sba_bible_font_size');
         return saved ? parseFloat(saved) : 17.6;
@@ -661,11 +669,11 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
     };
 
     return (
-        <ModalOverlay onClick={onClose}>
+        <ModalOverlay onClick={handleClose}>
             <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '95%' }}>
                 <ModalHeader>
                     <ModalTitle>설정 (Settings)</ModalTitle>
-                    <ModalCloseButton onClick={onClose}>✕</ModalCloseButton>
+                    <ModalCloseButton onClick={handleClose}>✕</ModalCloseButton>
                 </ModalHeader>
                 
                 {/* 소속 교회 정보 */}
@@ -810,8 +818,8 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
                         <FormLabel>묵상 기준일 설정 (startDateStr)</FormLabel>
                         <FormInput 
                             type="date" 
-                            value={startDateStr}
-                            onChange={e => setStartDateStr(e.target.value)}
+                            value={localStartDate}
+                            onChange={e => setLocalStartDate(e.target.value)}
                         />
                     </FormGroup>
                 </div>
@@ -844,7 +852,7 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
                 </div>
                 
                 <ButtonGroup style={{ marginTop: '20px' }}>
-                    <ShadButton onClick={onClose}>
+                    <ShadButton onClick={handleClose}>
                         확인
                     </ShadButton>
                 </ButtonGroup>
