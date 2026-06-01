@@ -144,18 +144,6 @@ function generateUUID() {
         // Capture Settings Modal showing admin section (Purge / startDateStr)
         await captureAndLog('qa_5_settings_admin_tab.png');
 
-        // Change startDateStr (묵상 기준일 설정) to 2026-05-01
-        console.log('Changing 묵상 기준일 설정...');
-        await page.evaluate(() => {
-            const dateInput = document.querySelector('input[type="date"]');
-            if (dateInput) {
-                dateInput.value = '2026-05-01';
-                dateInput.dispatchEvent(new Event('input', { bubbles: true }));
-                dateInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        });
-        await delay(500);
-
         // Click Google Sheets Purge button
         console.log('Triggering Google Sheets Purge sync...');
         await page.evaluate(() => {

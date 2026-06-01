@@ -350,23 +350,8 @@ export default function App() {
     const [currentDate, setCurrentDate] = useState(getEffectiveDate());
     const [activeTab, setActiveTab] = useState('today');
 
-    // 묵상 기준일 상태 (구글 시트 연동 시 날짜 계산 오프셋용)
-    const [startDateStr, setStartDateStr] = useState(() => {
-        let val = localStorage.getItem('sba_qt_start_date');
-        // 이전 잘못된 배포나 설정 변경 테스트로 인해 브라우저 로컬스토리지에 저장되어 있을 수 있는
-        // 오염된 묵상 기준일을 올바른 원래의 기준일인 2024-12-17로 무조건 강제 복구합니다.
-        if (val !== '2024-12-17') {
-            localStorage.setItem('sba_qt_start_date', '2024-12-17');
-            val = '2024-12-17';
-        }
-        return val;
-    });
-
-    const handleSetStartDateStr = (val) => {
-        setStartDateStr(val);
-        localStorage.setItem('sba_qt_start_date', val);
-        addToast("묵상 기준일이 변경되었습니다.");
-    };
+    // 묵상 시작 기준일은 원래의 올바른 시작일인 2024-12-17로 시스템 수준에서 영구 고정합니다.
+    const START_DATE_STR = '2024-12-17';
 
     // 뒤로가기(popstate) 제어용 상태
     const [isPopStateActive, setIsPopStateActive] = useState(false);
@@ -710,8 +695,9 @@ export default function App() {
     }, [userChurch, currentDate]);
 
     useEffect(() => {
-        // 첫 진입 시 히스토리 초기화
+        // 첫 진입 시 히스토리 및 불필요한 시작일 로컬스토리지 캐시 초기화
         window.history.replaceState({ tab: activeTab }, '');
+        localStorage.removeItem('sba_qt_start_date');
 
         // 서비스 워커 등록
         if ('serviceWorker' in navigator) {
@@ -804,7 +790,7 @@ export default function App() {
         
         const diffToMonday = weekDayIdx === 0 ? -6 : 1 - weekDayIdx;
         const plans = {};
-        const parsedStartDate = new Date(startDateStr);
+        const parsedStartDate = new Date(START_DATE_STR);
         const startKST = getMidnightKST(
             parsedStartDate instanceof Date && !isNaN(parsedStartDate.getTime()) 
                 ? parsedStartDate 
@@ -861,7 +847,7 @@ export default function App() {
             plans[dKey] = { dayName, old: oldPlan, new: newPlan, dateObj: d };
         }
         return plans;
-    }, [scheduleData, targetKST, startDateStr, weekDayIdx]);
+    }, [scheduleData, targetKST, weekDayIdx]);
 
     const handleWeekCardClick = (dateObj) => {
         if (dateObj instanceof Date && !isNaN(dateObj.getTime())) {
@@ -885,7 +871,7 @@ export default function App() {
 
         if (scheduleData) {
             // 1. 묵상(QT)에서 검색
-            const parsedStartDate = new Date(startDateStr);
+            const parsedStartDate = new Date(START_DATE_STR);
             const startKST = getMidnightKST(
                 parsedStartDate instanceof Date && !isNaN(parsedStartDate.getTime()) 
                     ? parsedStartDate 
@@ -1188,8 +1174,6 @@ export default function App() {
                     setUserChurch={setUserChurch}
                     scheduleData={scheduleData}
                     loadSchedule={loadSchedule}
-                    startDateStr={startDateStr}
-                    setStartDateStr={handleSetStartDateStr}
                 />
 
                 <AuthModal

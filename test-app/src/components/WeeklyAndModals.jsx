@@ -365,16 +365,12 @@ const FontSizeVal = styled.span`
   text-align: center;
 `;
 
-export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, session, userChurch, setUserChurch, scheduleData, loadSchedule, startDateStr, setStartDateStr }) {
+export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, session, userChurch, setUserChurch, scheduleData, loadSchedule }) {
     if (!isOpen) return null;
     const [syncing, setSyncing] = useState(false);
     const [stats, setStats] = useState({ bookmarks: 0, notes: 0 });
-    const [localStartDate, setLocalStartDate] = useState(startDateStr);
 
     const handleClose = () => {
-        if (localStartDate && localStartDate !== startDateStr) {
-            setStartDateStr(localStartDate);
-        }
         onClose();
     };
     const [fontSize, setFontSize] = useState(() => {
@@ -812,17 +808,6 @@ export function SettingsModal({ isOpen, onClose, isDark, setIsDark, addToast, se
                     )}
                 </div>
 
-                {/* 묵상 시작 기준일 설정 */}
-                <div style={{ borderTop: '1px dashed var(--sba-border-strong)', paddingTop: '16px', marginTop: '16px' }}>
-                    <FormGroup>
-                        <FormLabel>묵상 기준일 설정 (startDateStr)</FormLabel>
-                        <FormInput 
-                            type="date" 
-                            value={localStartDate}
-                            onChange={e => setLocalStartDate(e.target.value)}
-                        />
-                    </FormGroup>
-                </div>
 
                 {/* 교회 관리자용 대시보드 버튼 */}
                 {isAdmin && (
