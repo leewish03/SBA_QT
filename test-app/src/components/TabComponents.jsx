@@ -437,7 +437,21 @@ function NoteEditor({ targetDate, session, onOpenAuthModal }) {
     const val = e.target.value;
     setContent(val);
     isDirtyRef.current = true;
-    setSaveStatus('변경됨 (저장 대기)');
+    setSaveStatus('저장 중...');
+
+    // 로컬스토리지 실시간 즉시 저장
+    const now = new Date().toISOString();
+    try {
+      const raw = localStorage.getItem('sba_qt_notes');
+      const parsed = raw ? JSON.parse(raw) : {};
+      parsed[dateStr] = {
+        content: val || '',
+        updated_at: now
+      };
+      localStorage.setItem('sba_qt_notes', JSON.stringify(parsed));
+    } catch (err) {
+      console.error('로컬 실시간 저장 실패:', err);
+    }
 
     if (timerRef.current) clearTimeout(timerRef.current);
     
@@ -445,7 +459,7 @@ function NoteEditor({ targetDate, session, onOpenAuthModal }) {
       if (isDirtyRef.current) {
         saveNote(val);
       }
-    }, 5000);
+    }, 800);
   };
 
   useEffect(() => {
