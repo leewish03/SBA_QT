@@ -642,43 +642,106 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
     });
   };
 
-  const removeBookmark = async (targetB) => {
+  const removeSelectedVersesFromBookmarks = async () => {
+    const vNumsToRemove = Object.keys(selectedVerses).map(Number).sort((a, b) => a - b);
+    if (vNumsToRemove.length === 0) return;
+
     let localBookmarks = [];
     try {
       const raw = localStorage.getItem('sba_qt_bookmarks');
       if (raw) localBookmarks = JSON.parse(raw);
     } catch (err) {}
 
-    const index = localBookmarks.findIndex(item => 
-      item.book === targetB.book && 
-      item.chapter === targetB.chapter && 
-      (item.verses === targetB.verses || (!item.verses && item.verse === targetB.verse))
-    );
+    const updatedLocalBookmarks = [];
+    const deleteList = [];
+    const updateList = [];
 
-    if (index > -1) {
-      localBookmarks.splice(index, 1);
-      localStorage.setItem('sba_qt_bookmarks', JSON.stringify(localBookmarks));
-      setBookmarks(localBookmarks);
-      addToast('북마크가 해제되었습니다.');
-      setSelectedVerses({});
+    for (const b of localBookmarks) {
+      if (b.book === book && b.chapter === parseInt(chapter)) {
+        const bVerses = b.verses ? b.verses.split(',').map(Number) : [b.verse];
+        const overlap = bVerses.filter(v => vNumsToRemove.includes(v));
+        
+        if (overlap.length > 0) {
+          const remainingVerses = bVerses.filter(v => !vNumsToRemove.includes(v));
+          
+          if (remainingVerses.length === 0) {
+            deleteList.push({
+              book: b.book,
+              chapter: b.chapter,
+              verse: b.verse,
+              verses: b.verses || null
+            });
+          } else {
+            const sortedRemaining = remainingVerses.sort((a, b) => a - b);
+            const newMinVerse = sortedRemaining[0];
+            const newVersesStr = sortedRemaining.join(',');
+            
+            const updatedB = {
+              ...b,
+              verse: newMinVerse,
+              verses: newVersesStr,
+              updated_at: new Date().toISOString()
+            };
+            updatedLocalBookmarks.push(updatedB);
+            
+            updateList.push({
+              old: {
+                book: b.book,
+                chapter: b.chapter,
+                verse: b.verse,
+                verses: b.verses || null
+              },
+              new: {
+                verse: newMinVerse,
+                verses: newVersesStr
+              }
+            });
+          }
+        } else {
+          updatedLocalBookmarks.push(b);
+        }
+      } else {
+        updatedLocalBookmarks.push(b);
+      }
+    }
 
-      if (session) {
-        try {
+    localStorage.setItem('sba_qt_bookmarks', JSON.stringify(updatedLocalBookmarks));
+    setBookmarks(updatedLocalBookmarks);
+    addToast('선택한 구절이 북마크에서 취소(제외)되었습니다.');
+    setSelectedVerses({});
+
+    if (session) {
+      try {
+        for (const item of deleteList) {
           await supabase
             .from('qt_bookmarks')
             .delete()
             .eq('user_id', session.user.id)
-            .eq('book', targetB.book)
-            .eq('chapter', targetB.chapter)
-            .eq('verse', targetB.verse)
-            .eq('verses', targetB.verses || null);
-        } catch (err) {
-          console.error('클라우드 북마크 삭제 실패:', err);
+            .eq('book', item.book)
+            .eq('chapter', item.chapter)
+            .eq('verse', item.verse)
+            .eq('verses', item.verses);
         }
+        
+        for (const item of updateList) {
+          await supabase
+            .from('qt_bookmarks')
+            .update({
+              verse: item.new.verse,
+              verses: item.new.verses
+            })
+            .eq('user_id', session.user.id)
+            .eq('book', item.old.book)
+            .eq('chapter', item.old.chapter)
+            .eq('verse', item.old.verse)
+            .eq('verses', item.old.verses);
+        }
+      } catch (err) {
+        console.error('클라우드 북마크 업데이트/삭제 실패:', err);
       }
-      
-      if (onBookmarkChange) onBookmarkChange();
     }
+
+    if (onBookmarkChange) onBookmarkChange();
   };
 
   const toggleBookmark = async () => {
@@ -769,11 +832,11 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
   
   const vNums = Object.keys(selectedVerses).map(Number).sort((a, b) => a - b);
   const versesStr = vNums.join(',');
-  const matchedBookmark = bookmarks.find(b => 
-    b.book === book && 
-    b.chapter === parseInt(chapter) && 
-    (b.verses === versesStr || (!b.verses && String(b.verse) === versesStr))
-  );
+  const hasOverlap = bookmarks.some(b => {
+    if (b.book !== book || b.chapter !== parseInt(chapter)) return false;
+    const bVerses = b.verses ? b.verses.split(',').map(Number) : [b.verse];
+    return bVerses.some(v => vNums.includes(v));
+  });
 
   return (
     <>
@@ -803,10 +866,10 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
           <FloatingInfo>{selectedCount}개 구절 선택됨</FloatingInfo>
           <FloatingBtnGroup>
             <FloatingBtn onClick={copyToClipboard}>복사</FloatingBtn>
-            {matchedBookmark ? (
+            {hasOverlap ? (
               <FloatingBtn 
                 $variant="accent" 
-                onClick={() => removeBookmark(matchedBookmark)}
+                onClick={removeSelectedVersesFromBookmarks}
                 style={{ background: '#ef4444', borderColor: '#ef4444', color: 'white' }}
               >
                 북마크 해제
