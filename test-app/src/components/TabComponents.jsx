@@ -6,6 +6,40 @@ import { bibleStorage } from '../utils/BibleStorage';
 import { supabase } from '../utils/supabaseClient';
 import { ShinyText, SpotlightCard } from './ReactBits';
 
+export function formatVersesRange(versesStr) {
+  if (!versesStr) return '';
+  const nums = versesStr.split(',').map(Number).sort((a, b) => a - b);
+  if (nums.length === 0) return '';
+  if (nums.length === 1) return `${nums[0]}`;
+
+  const parts = [];
+  let start = nums[0];
+  let prev = nums[0];
+
+  for (let i = 1; i < nums.length; i++) {
+    const curr = nums[i];
+    if (curr === prev + 1) {
+      prev = curr;
+    } else {
+      if (start === prev) {
+        parts.push(`${start}`);
+      } else {
+        parts.push(`${start}~${prev}`);
+      }
+      start = curr;
+      prev = curr;
+    }
+  }
+  if (start === prev) {
+    parts.push(`${start}`);
+  } else {
+    parts.push(`${start}~${prev}`);
+  }
+
+  return parts.join(', ');
+}
+
+
 // ==========================================
 // 0. 말씀 뷰어 관련 styled-components
 // ==========================================
@@ -41,14 +75,18 @@ const VerseBlock = styled.div`
   transition: background-color 0.2s;
   -webkit-tap-highlight-color: transparent;
 
-  &:hover {
-    background-color: var(--sba-card-active);
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--sba-card-active);
+    }
   }
   
   &.highlighted {
     background-color: var(--sba-highlight);
-    &:hover {
-      background-color: var(--sba-highlight-hover);
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--sba-highlight-hover);
+      }
     }
   }
   
@@ -604,6 +642,45 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
     });
   };
 
+  const removeBookmark = async (targetB) => {
+    let localBookmarks = [];
+    try {
+      const raw = localStorage.getItem('sba_qt_bookmarks');
+      if (raw) localBookmarks = JSON.parse(raw);
+    } catch (err) {}
+
+    const index = localBookmarks.findIndex(item => 
+      item.book === targetB.book && 
+      item.chapter === targetB.chapter && 
+      (item.verses === targetB.verses || (!item.verses && item.verse === targetB.verse))
+    );
+
+    if (index > -1) {
+      localBookmarks.splice(index, 1);
+      localStorage.setItem('sba_qt_bookmarks', JSON.stringify(localBookmarks));
+      setBookmarks(localBookmarks);
+      addToast('북마크가 해제되었습니다.');
+      setSelectedVerses({});
+
+      if (session) {
+        try {
+          await supabase
+            .from('qt_bookmarks')
+            .delete()
+            .eq('user_id', session.user.id)
+            .eq('book', targetB.book)
+            .eq('chapter', targetB.chapter)
+            .eq('verse', targetB.verse)
+            .eq('verses', targetB.verses || null);
+        } catch (err) {
+          console.error('클라우드 북마크 삭제 실패:', err);
+        }
+      }
+      
+      if (onBookmarkChange) onBookmarkChange();
+    }
+  };
+
   const toggleBookmark = async () => {
     const vNums = Object.keys(selectedVerses).map(Number).sort((a, b) => a - b);
     if (vNums.length === 0) return;
@@ -671,7 +748,8 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
       textToCopy = selectedVerses[vNums[0]].trim();
     } else {
       const fullName = SHORT_TO_FULL[book] || book;
-      const rangeStr = `${vNums[0]}~${vNums[vNums.length - 1]}`;
+      const versesStr = vNums.join(',');
+      const rangeStr = formatVersesRange(versesStr);
       const sortedTexts = vNums.map(v => `${v} ${selectedVerses[v].trim()}`).join('\n');
       textToCopy = `[${fullName} ${chapter}:${rangeStr}]\n${sortedTexts}`;
     }
@@ -688,6 +766,14 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
 
   const fullName = SHORT_TO_FULL[book] || book;
   const selectedCount = Object.keys(selectedVerses).length;
+  
+  const vNums = Object.keys(selectedVerses).map(Number).sort((a, b) => a - b);
+  const versesStr = vNums.join(',');
+  const matchedBookmark = bookmarks.find(b => 
+    b.book === book && 
+    b.chapter === parseInt(chapter) && 
+    (b.verses === versesStr || (!b.verses && String(b.verse) === versesStr))
+  );
 
   return (
     <>
@@ -717,7 +803,17 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
           <FloatingInfo>{selectedCount}개 구절 선택됨</FloatingInfo>
           <FloatingBtnGroup>
             <FloatingBtn onClick={copyToClipboard}>복사</FloatingBtn>
-            <FloatingBtn $variant="accent" onClick={toggleBookmark}>북마크 추가</FloatingBtn>
+            {matchedBookmark ? (
+              <FloatingBtn 
+                $variant="accent" 
+                onClick={() => removeBookmark(matchedBookmark)}
+                style={{ background: '#ef4444', borderColor: '#ef4444', color: 'white' }}
+              >
+                북마크 해제
+              </FloatingBtn>
+            ) : (
+              <FloatingBtn $variant="accent" onClick={toggleBookmark}>북마크 추가</FloatingBtn>
+            )}
             <FloatingBtn onClick={() => setSelectedVerses({})}>해제</FloatingBtn>
           </FloatingBtnGroup>
         </FloatingBar>
@@ -980,11 +1076,7 @@ function BookmarkDetailModal({ bookmark, onClose, onSaveMemo, onDelete, onGoToVe
   };
 
   const fullName = SHORT_TO_FULL[bookmark.book] || bookmark.book;
-  let rangeStr = `${bookmark.verse}`;
-  if (bookmark.verses && bookmark.verses.includes(',')) {
-    const list = bookmark.verses.split(',');
-    rangeStr = `${list[0]}~${list[list.length - 1]}`;
-  }
+  const rangeStr = bookmark.verses ? formatVersesRange(bookmark.verses) : `${bookmark.verse}`;
 
   return (
     <DetailModalOverlay onClick={onClose}>
@@ -1285,11 +1377,7 @@ export function TabBookmarks({ session, onOpenAuthModal, onNavigateToVerse, upda
       });
     }
     const fullName = SHORT_TO_FULL[b.book] || b.book;
-    let rangeStr = `${b.verse}`;
-    if (b.verses && b.verses.includes(',')) {
-      const list = b.verses.split(',');
-      rangeStr = `${list[0]}~${list[list.length - 1]}`;
-    }
+    const rangeStr = b.verses ? formatVersesRange(b.verses) : `${b.verse}`;
     setActiveCardBookmark({
       passage: `${fullName} ${b.chapter}:${rangeStr}`,
       verses: versesObj
@@ -1356,11 +1444,7 @@ export function TabBookmarks({ session, onOpenAuthModal, onNavigateToVerse, upda
             <div className="sba-bookmark-list">
               {filteredBookmarks.map((b, idx) => {
                 const fullName = SHORT_TO_FULL[b.book] || b.book;
-                let rangeStr = `${b.verse}`;
-                if (b.verses && b.verses.includes(',')) {
-                  const list = b.verses.split(',');
-                  rangeStr = `${list[0]}~${list[list.length - 1]}`;
-                }
+                const rangeStr = b.verses ? formatVersesRange(b.verses) : `${b.verse}`;
 
                 return (
                   <SpotlightCard
@@ -1788,11 +1872,7 @@ function BookmarkSelectModal({ isOpen, onClose, onSelect, addToast }) {
           <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {bookmarks.map((b, idx) => {
               const fullName = SHORT_TO_FULL[b.book] || b.book;
-              let rangeStr = `${b.verse}`;
-              if (b.verses && b.verses.includes(',')) {
-                const list = b.verses.split(',');
-                rangeStr = `${list[0]}~${list[list.length - 1]}`;
-              }
+              const rangeStr = b.verses ? formatVersesRange(b.verses) : `${b.verse}`;
               const passageName = `${fullName} ${b.chapter}:${rangeStr}`;
 
               return (
