@@ -1812,6 +1812,7 @@ const FeedContent = styled.div`
   white-space: pre-wrap;
   word-break: break-all;
   margin: 4px 0;
+  text-align: left;
 `;
 
 const ActionSection = styled.div`
