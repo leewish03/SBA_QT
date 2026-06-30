@@ -10,6 +10,14 @@ import { supabase } from './utils/supabaseClient';
 import { syncLocalDataToCloud } from './utils/syncManager';
 import { DecryptedText } from './components/ReactBits';
 
+const DEFAULT_CHURCH = {
+  id: '5e87c20a-39e6-440b-925a-04c225c28940',
+  slug: 'seoul-north',
+  name: '서울북부교회',
+  theme_color: '#4A5568',
+  is_public: true
+};
+
 // ====================================================
 // Theme Configs (Shadcn Slate 무채색 기반)
 // ====================================================
@@ -369,8 +377,7 @@ export default function App() {
         return window.matchMedia('(prefers-color-scheme: dark)').matches;
     });
     const [session, setSession] = useState(null);
-    const [userChurch, setUserChurch] = useState(null);
-    const [checkingChurch, setCheckingChurch] = useState(true);
+    const [userChurch, setUserChurch] = useState(DEFAULT_CHURCH);
     const [bookmarkTrigger, setBookmarkTrigger] = useState(0);
 
     // 모달 관리
@@ -418,7 +425,10 @@ export default function App() {
 
     // 소속 교회 확인 및 라우팅 처리 통합 함수
     const handleRoutingAndLoad = async () => {
-        setCheckingChurch(true);
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        const slug = pathParts[0] || '';
+        const isDefaultRoute = !slug || slug === 'seoul-north';
+
         try {
             // 1. 세션 복구
             const { data: { session: curSession } } = await supabase.auth.getSession();
@@ -426,14 +436,11 @@ export default function App() {
                 setSession(curSession);
             }
 
-            // 2. URL 경로 파싱
-            const pathParts = window.location.pathname.split('/').filter(Boolean);
-            const slug = pathParts[0] || '';
+            if (isDefaultRoute) {
+                const prevLastVisited = localStorage.getItem('sba_last_visited_church');
+                localStorage.setItem('sba_last_visited_church', 'seoul-north');
 
-            if (!slug) {
-                // 루트 (/) 진입 시 지능형 리다이렉션
                 if (curSession) {
-                    // 로그인 사용자 (1순위): 본인 소속 교회 조회
                     const headers = { 'Content-Type': 'application/json' };
                     const authKey = 'sb-ebfpjvwwbognddixrvyc-auth-token';
                     const savedSession = localStorage.getItem(authKey);
@@ -446,90 +453,84 @@ export default function App() {
                         } catch (e) {}
                     }
                     const res = await fetch('/api/churches/mine', { headers });
-                    if (res.ok) {
-                        const mine = await res.json();
-                        if (mine && mine.slug) {
-                            window.location.replace(`/${mine.slug}`);
-                            return;
+                    const mine = res.ok ? await res.json() : null;
+
+                    if (mine) {
+                        if (mine.slug !== 'seoul-north') {
+                            if (window.confirm(`소속 교회인 '${mine.name}'(으)로 이동하시겠습니까?`)) {
+                                window.location.replace(`/${mine.slug}`);
+                                return;
+                            }
+                        } else {
+                            setUserChurch({ ...DEFAULT_CHURCH, role: mine.role });
+                        }
+                    } else {
+                        await fetch('/api/churches/join', {
+                            method: 'POST',
+                            headers: {
+                                ...headers,
+                                'Authorization': headers['Authorization'] || `Bearer ${curSession.access_token}`
+                            },
+                            body: JSON.stringify({ church_id: DEFAULT_CHURCH.id })
+                        });
+                        addToast(`'${DEFAULT_CHURCH.name}' 교회 소속으로 연동되었습니다.`);
+                        const newMineRes = await fetch('/api/churches/mine', { headers });
+                        const newMine = newMineRes.ok ? await newMineRes.json() : null;
+                        if (newMine) {
+                            setUserChurch({ ...DEFAULT_CHURCH, role: newMine.role });
                         }
                     }
-                }
-
-                // 비로그인 사용자 또는 소속 교회가 없는 로그인 사용자 (2순위): 로컬 캐시 조회
-                const lastVisited = localStorage.getItem('sba_last_visited_church');
-                if (lastVisited) {
-                    window.location.replace(`/${lastVisited}`);
-                    return;
-                }
-
-                // 최초 방문자 (3순위): 기본값으로 /seoul-north 리다이렉트
-                window.location.replace('/seoul-north');
-                return;
-            }
-
-            // 하위 경로 (/slug) 진입 시
-            const res = await fetch(`/api/churches?slug=${slug}`);
-            if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
-            const data = await res.json();
-            if (data && data.length > 0) {
-                let church = data[0];
-                setUserChurch(church);
-                localStorage.setItem('sba_last_visited_church', slug);
-
-                // 로그인된 사용자라면, 소속 교회 멤버십 연동 처리
-                if (curSession) {
-                    try {
-                        const headers = { 'Content-Type': 'application/json' };
-                        const authKey = 'sb-ebfpjvwwbognddixrvyc-auth-token';
-                        const savedSession = localStorage.getItem(authKey);
-                        if (savedSession) {
-                            try {
-                                const parsed = JSON.parse(savedSession);
-                                if (parsed?.access_token) {
-                                    headers['Authorization'] = `Bearer ${parsed.access_token}`;
+                } else {
+                    if (prevLastVisited && prevLastVisited !== 'seoul-north') {
+                        try {
+                            const churchRes = await fetch(`/api/churches?slug=${prevLastVisited}`);
+                            if (churchRes.ok) {
+                                const churchData = await churchRes.json();
+                                if (churchData && churchData.length > 0) {
+                                    const targetChurch = churchData[0];
+                                    if (window.confirm(`최근 방문하신 '${targetChurch.name}' 교회로 이동하시겠습니까?`)) {
+                                        window.location.replace(`/${prevLastVisited}`);
+                                        return;
+                                    }
                                 }
-                            } catch (e) {}
+                            }
+                        } catch (err) {
+                            console.error('타 교회 조회 실패:', err);
+                            if (window.confirm(`최근 방문하신 교회(/${prevLastVisited})로 이동하시겠습니까?`)) {
+                                window.location.replace(`/${prevLastVisited}`);
+                                return;
+                            }
                         }
-                        
-                        // 현재 가입된 교회가 있는지 조회
-                        const mineRes = await fetch('/api/churches/mine', { headers });
-                        let mine = mineRes.ok ? await mineRes.json() : null;
-
-                        // 소속이 없거나, 다른 교회인 경우 자동 가입(멤버십 연동) 및 동기화 수행
-                        if (!mine || mine.id !== church.id) {
-                            await fetch('/api/churches/join', {
-                                method: 'POST',
-                                headers: {
-                                    ...headers,
-                                    'Authorization': headers['Authorization'] || `Bearer ${curSession.access_token}`
-                                },
-                                body: JSON.stringify({ church_id: church.id })
-                            });
-                            addToast(`'${church.name}' 교회 소속으로 연동되었습니다.`);
-                            // 다시 mine을 불러와 role을 세팅
-                            const newMineRes = await fetch('/api/churches/mine', { headers });
-                            mine = newMineRes.ok ? await newMineRes.json() : null;
-                        }
-                        
-                        if (mine && mine.id === church.id) {
-                            setUserChurch({ ...church, role: mine.role });
-                        }
-                    } catch (err) {
-                        console.error('교회 멤버십 자동 연동 실패:', err);
                     }
                 }
             } else {
-                console.warn(`유효하지 않은 교회 슬러그: ${slug}. 서울북부교회로 이동합니다.`);
-                window.location.replace('/seoul-north');
-                return;
+                try {
+                    const churchRes = await fetch(`/api/churches?slug=${slug}`);
+                    if (churchRes.ok) {
+                        const churchData = await churchRes.json();
+                        if (churchData && churchData.length > 0) {
+                            const targetChurch = churchData[0];
+                            setUserChurch(targetChurch);
+                            localStorage.setItem('sba_last_visited_church', slug);
+                        } else {
+                            console.warn(`유효하지 않은 교회 슬러그: ${slug}. 서울북부교회로 이동합니다.`);
+                            window.location.replace('/seoul-north');
+                            return;
+                        }
+                    } else {
+                        console.warn(`교회 조회 API 오류로 서울북부교회로 이동합니다.`);
+                        window.location.replace('/seoul-north');
+                        return;
+                    }
+                } catch (err) {
+                    console.error('타 교회 조회 실패:', err);
+                    window.location.replace('/seoul-north');
+                    return;
+                }
             }
         } catch (err) {
             console.error('라우팅 및 교회 로드 실패:', err);
             addToast('교회 정보를 불러오지 못했습니다.');
-        } finally {
-            setCheckingChurch(false);
         }
     };
 
@@ -1111,17 +1112,7 @@ export default function App() {
         }
     };
 
-    // 로딩 혹은 RLS 조회 대기
-    if (checkingChurch || !userChurch) {
-        return (
-            <ThemeProvider theme={theme}>
-                <GlobalStyle />
-                <OnboardingOverlay>
-                    <div className="sba-loading">교회 정보를 조회하는 중...</div>
-                </OnboardingOverlay>
-            </ThemeProvider>
-        );
-    }
+
 
     // 3. 정상 접속 화면 (로그인 완료 + 소속 교회 존재)
     return (
