@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-const scratchDir = 'C:\\Users\\WISH\\.gemini\\antigravity\\brain\\0f115f8d-ebee-45ea-a01e-1651f80756a1\\scratch';
+const scratchDir = 'C:\\Users\\WISH\\.gemini\\antigravity\\brain\\422f04a7-3ffc-4808-8ad2-71471a2d77d8\\scratch';
 if (!fs.existsSync(scratchDir)) {
     fs.mkdirSync(scratchDir, { recursive: true });
 }
@@ -25,12 +25,26 @@ function generateUUID() {
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
+    
+    // Override clipboard permissions to read/write clipboard contents during test
+    const context = browser.defaultBrowserContext();
+    await context.overridePermissions('http://localhost:3000', ['clipboard-read', 'clipboard-write']);
     const page = await browser.newPage();
 
-    // Mock confirm & alert to prevent Puppeteer blocking
+    // Mock confirm, alert & clipboard to prevent Puppeteer blocking and permission errors
     await page.evaluateOnNewDocument(() => {
         window.confirm = () => true;
         window.alert = () => {};
+        
+        let mockText = '';
+        Object.defineProperty(navigator, 'clipboard', {
+            value: {
+                writeText: async (text) => { mockText = text; return Promise.resolve(); },
+                readText: async () => { return Promise.resolve(mockText); }
+            },
+            configurable: true,
+            writable: true
+        });
     });
     
     // Set viewport to mobile size
@@ -74,8 +88,8 @@ function generateUUID() {
         }
 
         // 1. Splash & Guest Onboarding
-        console.log('1. Navigating to http://localhost:3000/seoul-north...');
-        await page.goto('http://localhost:3000/seoul-north', { waitUntil: 'networkidle2' });
+        console.log('1. Navigating to http://localhost:3000/...');
+        await page.goto('http://localhost:3000/', { waitUntil: 'networkidle2' });
         
         console.log('Waiting for splash screen...');
         await delay(4500); // 4.5s delay to ensure splash is fully gone
@@ -200,6 +214,103 @@ function generateUUID() {
         // 5. Verify the updated schedule on main screen
         console.log('5. Verifying applied schedule...');
         await captureAndLog('qa_7_main_schedule_applied.png');
+
+        // === 5.1 단일 구절 복사 테스트 ===
+        console.log('5.1 Testing single verse copy...');
+        await page.waitForSelector('div[id^="verse-"]');
+        
+        const firstVerseBlock = await page.$('div[id^="verse-"]');
+        if (firstVerseBlock) {
+            const verseNum = await page.evaluate(el => el.children[0].textContent.trim(), firstVerseBlock);
+            const verseText = await page.evaluate(el => el.children[1].textContent.trim(), firstVerseBlock);
+            console.log(`First Verse Num: ${verseNum}, Text: ${verseText}`);
+            
+            await page.evaluate(el => el.click(), firstVerseBlock);
+            await delay(500);
+            
+            const isFloatingBarVisible = await page.evaluate(() => document.querySelector('.sba-floating-bar') !== null);
+            console.log(`Is Floating Bar visible? ${isFloatingBarVisible}`);
+            
+            await page.evaluate(() => {
+                const btns = Array.from(document.querySelectorAll('.sba-floating-bar button'));
+                const copyBtn = btns.find(b => b.textContent.includes('복사'));
+                if (copyBtn) copyBtn.click();
+            });
+            await delay(800);
+            
+            const copiedText = await page.evaluate(() => navigator.clipboard.readText());
+            console.log(`Copied text: \n"${copiedText}"`);
+            
+            const lines = copiedText.split('\n');
+            const headerValid = lines[0].startsWith('[') && lines[0].endsWith(']');
+            const bodyText = lines.slice(1).join('\n').trim();
+            const bodyValid = bodyText === verseText;
+            
+            console.log(`Header Valid: ${headerValid} ("${lines[0]}")`);
+            console.log(`Body Valid (No Verse Num): ${bodyValid} ("${bodyText}" vs "${verseText}")`);
+            
+            if (headerValid && bodyValid) {
+                console.log('▶ [SUCCESS] Single verse copy format verified! Header has citation and body has no verse number.');
+            } else {
+                console.error('▶ [FAILURE] Single verse copy format failed validation.');
+            }
+            
+            const isFloatingBarCleared = await page.evaluate(() => document.querySelector('.sba-floating-bar') === null);
+            console.log(`Is Floating Bar cleared after copy? ${isFloatingBarCleared}`);
+        } else {
+            console.error('Failed to find verse block for single verse copy test');
+        }
+
+        // === 5.2 다중 구절 복사 테스트 ===
+        console.log('5.2 Testing multiple verses copy...');
+        const verseBlocks = await page.$$('div[id^="verse-"]');
+        if (verseBlocks.length >= 2) {
+            const v1Num = await page.evaluate(el => el.children[0].textContent.trim(), verseBlocks[0]);
+            const v1Text = await page.evaluate(el => el.children[1].textContent.trim(), verseBlocks[0]);
+            const v2Num = await page.evaluate(el => el.children[0].textContent.trim(), verseBlocks[1]);
+            const v2Text = await page.evaluate(el => el.children[1].textContent.trim(), verseBlocks[1]);
+            
+            console.log(`Verse 1: ${v1Num} - ${v1Text}`);
+            console.log(`Verse 2: ${v2Num} - ${v2Text}`);
+            
+            await page.evaluate(el => el.click(), verseBlocks[0]);
+            await page.evaluate(el => el.click(), verseBlocks[1]);
+            await delay(500);
+            
+            await page.evaluate(() => {
+                const btns = Array.from(document.querySelectorAll('.sba-floating-bar button'));
+                const copyBtn = btns.find(b => b.textContent.includes('복사'));
+                if (copyBtn) copyBtn.click();
+            });
+            await delay(800);
+            
+            const copiedTextMult = await page.evaluate(() => navigator.clipboard.readText());
+            console.log(`Copied text (Multiple): \n"${copiedTextMult}"`);
+            
+            const linesMult = copiedTextMult.split('\n');
+            const headerMultValid = linesMult[0].startsWith('[') && linesMult[0].endsWith(']');
+            
+            const expectedLine1 = `${v1Num} ${v1Text}`;
+            const expectedLine2 = `${v2Num} ${v2Text}`;
+            const actualLine1 = linesMult[1]?.trim();
+            const actualLine2 = linesMult[2]?.trim();
+            
+            const bodyMultValid = actualLine1 === expectedLine1 && actualLine2 === expectedLine2;
+            
+            console.log(`Header Mult Valid: ${headerMultValid} ("${linesMult[0]}")`);
+            console.log(`Body Mult Valid (With Verse Nums): ${bodyMultValid}`);
+            
+            if (headerMultValid && bodyMultValid) {
+                console.log('▶ [SUCCESS] Multiple verses copy format verified! Format is "[Citation]\\n1 Text1\\n2 Text2".');
+            } else {
+                console.error('▶ [FAILURE] Multiple verses copy format failed validation.');
+            }
+            
+            const isFloatingBarClearedMult = await page.evaluate(() => document.querySelector('.sba-floating-bar') === null);
+            console.log(`Is Floating Bar cleared after multiple copy? ${isFloatingBarClearedMult}`);
+        } else {
+            console.error('Failed to find at least 2 verse blocks for multiple verses copy test');
+        }
 
         // 6. Re-open settings to check push/theme configuration
         console.log('6. Re-opening Settings Modal to check configurations...');

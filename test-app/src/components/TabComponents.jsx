@@ -820,13 +820,16 @@ function VerseReader({ book, chapter, verses, dateStr, session, addToast, onBook
     const vNums = Object.keys(selectedVerses).map(Number).sort((a, b) => a - b);
     if (vNums.length === 0) return;
 
-    let textToCopy = "";
+    const fullName = SHORT_TO_FULL[book] || book;
+    const versesStr = vNums.join(',');
+    const rangeStr = formatVersesRange(versesStr);
+    
+    let textToCopy = '';
     if (vNums.length === 1) {
-      textToCopy = selectedVerses[vNums[0]].trim();
+      const singleVerseNum = vNums[0];
+      const singleVerseText = selectedVerses[singleVerseNum].trim();
+      textToCopy = `[${fullName} ${chapter}:${rangeStr}]\n${singleVerseText}`;
     } else {
-      const fullName = SHORT_TO_FULL[book] || book;
-      const versesStr = vNums.join(',');
-      const rangeStr = formatVersesRange(versesStr);
       const sortedTexts = vNums.map(v => `${v} ${selectedVerses[v].trim()}`).join('\n');
       textToCopy = `[${fullName} ${chapter}:${rangeStr}]\n${sortedTexts}`;
     }
