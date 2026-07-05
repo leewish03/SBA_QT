@@ -3,7 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- PWA 매니페스트 연결 -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- 모바일 최적화 뷰포트 설정: 줌 억제 및 모바일 네이티브 스케일 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no" />
+
+    <!-- Android 주소창 색상 설정 -->
+    <meta name="theme-color" content="#1a5f7a" />
+
+    <!-- iOS Safari Web App 최적화 설정 -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SBA QT" />
+
+    <!-- iOS 홈 화면 아이콘 매핑 (기안착된 고해상도 PNG 리소스 연동) -->
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
     <meta name="description" content="SBA QT - 온 회중이 함께하는 모바일 성경 묵상 및 통독 스케줄 플랫폼" />
     <meta name="author" content="이소원" />
     <meta property="og:type" content="website" />
